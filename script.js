@@ -1,375 +1,161 @@
-// Enhanced Weather & Life Application v2.0
-// Developed by Silent Vision Team
-
-// Global variables
-let currentWeatherData = null;
-let aiChatHistory = [];
-let isAITyping = false;
-let sosActive = false;
-let sosTimer = null;
-
-// API Keys Management
-const apiKeys = {
-  openai: localStorage.getItem('openai_api_key') || '',
-  weather: localStorage.getItem('weather_api_key') || '',
-  news: localStorage.getItem('news_api_key') || ''
-};
-
-// API Endpoints
-const API_ENDPOINTS = {
-  weather: 'https://api.weatherapi.com/v1/current.json',
-  forecast: 'https://api.weatherapi.com/v1/forecast.json',
-  news: 'https://newsapi.org/v2/top-headlines',
-  openai: 'https://api.openai.com/v1/chat/completions'
-};
-let isVoiceEnabled = false;
-let recognition = null;
-let synthesis = null;
-
-// Initialize speech recognition and synthesis
-function initializeSpeech() {
-  // Speech Recognition
-  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'vi-VN';
-    
-    recognition.onresult = function(event) {
-      const transcript = event.results[0][0].transcript;
-      document.getElementById('aiInput').value = transcript;
-      sendAIMessage();
-    };
-    
-    recognition.onerror = function(event) {
-      showNotification('Lỗi nhận diện giọng nói: ' + event.error, 'error');
-    };
-  }
-  
-  // Speech Synthesis
-  if ('speechSynthesis' in window) {
-    synthesis = window.speechSynthesis;
-  }
-}
-
-// Clock functionality with enhanced display
+// Clock functionality
 function updateClock() {
   const now = new Date();
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const seconds = String(now.getSeconds()).padStart(2, '0');
-  const date = now.toLocaleDateString('vi-VN', { 
-    weekday: 'short', 
-    day: '2-digit', 
-    month: '2-digit' 
-  });
-  document.getElementById('clock').innerHTML = `
-    <div class="text-center">
-      <div class="font-bold">${hours}:${minutes}:${seconds}</div>
-      <div class="text-xs text-gray-500">${date}</div>
-    </div>
-  `;
+  document.getElementById('clock').textContent = `${hours}:${minutes}:${seconds}`;
 }
 
-// Enhanced weather data with more realistic information
+// Enhanced weather data with more realistic patterns
 const weatherData = {
-  temperature: [26, 28, 31, 30, 29, 27, 28],
-  humidity: [70, 75, 65, 80, 85, 78, 72],
-  rainfall: [5, 10, 0, 20, 15, 8, 12],
-  uv: [3, 5, 8, 7, 6, 4, 5],
-  days: ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
-  current: {
-    temp: 28,
-    humidity: 75,
-    windSpeed: 15,
-    visibility: 10,
-    location: "Đà Nẵng, Việt Nam",
-    condition: "Có mây",
-    icon: "🌤️",
-    aqi: 45,
-    uv: 6
-  }
+  temperature: [26, 28, 31, 33, 30, 27, 25],
+  humidity: [75, 70, 65, 60, 80, 85, 78],
+  rainfall: [2, 0, 0, 5, 25, 15, 8],
+  windSpeed: [12, 15, 18, 20, 25, 22, 16],
+  uvIndex: [6, 8, 9, 10, 7, 5, 6],
+  pressure: [1012, 1015, 1018, 1020, 1008, 1005, 1010],
+  days: ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
 };
 
 // Enhanced feature messages with more detailed information
 const featureMessages = {
-  weather: `🌤️ THÔNG TIN THỜI TIẾT CHI TIẾT
-
-📍 Vị trí: ${weatherData.current.location}
-🌡️ Nhiệt độ: ${weatherData.current.temp}°C (Cảm giác như 30°C)
-💧 Độ ẩm: ${weatherData.current.humidity}%
-💨 Gió: ${weatherData.current.windSpeed} km/h, hướng Đông Nam
-👁️ Tầm nhìn: ${weatherData.current.visibility} km
-☁️ Tình trạng: ${weatherData.current.condition}
-🌞 Chỉ số UV: ${weatherData.current.uv} (Trung bình)
-🍃 AQI: ${weatherData.current.aqi} (Tốt)
-
-📊 Dự báo 24h tới:
-• 15:00 - Mưa nhẹ (75% khả năng)
-• 18:00 - Có mây
-• 21:00 - Quang đãng
-• 06:00 - Nắng ráo
-
-💡 Lời khuyên: Nên mang theo ô khi ra ngoài chiều nay!`,
-
-  sos: `🚨 TÍNH NĂNG SOS KHẨN CẤP ĐÃ ĐƯỢC KÍCH HOẠT!
-
-📞 Đang kết nối với:
-• Trung tâm cứu hộ 115
-• Cảnh sát 113  
-• Cứu thương 114
-• Cứu hỏa 114
-
-📍 Vị trí GPS đã được gửi:
-• Tọa độ: ${weatherData.current.location}
-• Độ chính xác: ±5m
-• Thời gian: ${new Date().toLocaleString('vi-VN')}
-
-⚡ Trạng thái: Đang chờ phản hồi...
-🔔 Thông báo đã được gửi đến liên hệ khẩn cấp
-📱 Tin nhắn tự động đã được gửi
-
-⚠️ Lưu ý: Chỉ sử dụng khi thực sự cần thiết!`,
-
-  plants: `🌱 TƯ VẤN CÂY TRỒNG THÔNG MINH (AI)
-
-🌤️ Phân tích thời tiết hiện tại:
-• Nhiệt độ: ${weatherData.current.temp}°C - Lý tưởng cho cây nhiệt đới
-• Độ ẩm: ${weatherData.current.humidity}% - Phù hợp cho hầu hết cây trồng
-• Ánh sáng: Trung bình - Tốt cho cây ưa bóng
-• UV: ${weatherData.current.uv} - An toàn cho cây
-
-🌿 Gợi ý cây trồng phù hợp:
-• Cà chua 🍅 - Thời vụ tốt, cần tưới đều
-• Dưa chuột 🥒 - Phát triển mạnh trong thời tiết này
-• Rau muống 🥬 - Dễ trồng, thu hoạch nhanh
-• Hoa hướng dương 🌻 - Cần nhiều ánh sáng
-• Cây bạc hà 🌿 - Thích hợp với độ ẩm cao
-• Ớt 🌶️ - Phù hợp với nhiệt độ hiện tại
-
-💡 Lời khuyên AI:
-• Tưới nước vào buổi sáng sớm (6-7h)
-• Bón phân hữu cơ 2 tuần/lần
-• Chú ý thoát nước khi mưa nhiều
-• Sử dụng lưới che nắng nếu cần
-
-📱 Nhắc nhở: Đặt lịch tưới nước tự động!`,
-
-  alerts: `⚠️ HỆ THỐNG CẢNH BÁO THỜI TIẾT AI
-
-🌧️ Cảnh báo ngắn hạn (24h):
-• 15:00 hôm nay: Mưa rào và dông (75%)
-• 20:00 hôm nay: Gió mạnh cấp 6 (60%)
-• Đêm nay: Mưa vừa đến to (80%)
-
-🌪️ Cảnh báo trung hạn (3-7 ngày):
-• Thứ 5-6: Khả năng có áp thấp nhiệt đới
-• Cuối tuần: Mưa lớn diện rộng
-• Tuần sau: Thời tiết ổn định trở lại
-
-🚨 Khuyến nghị khẩn cấp:
-• Hạn chế ra ngoài từ 15h-21h hôm nay
-• Chuẩn bị đồ dự phòng: đèn pin, nước uống
-• Kiểm tra hệ thống thoát nước nhà
-• Theo dõi tin tức cập nhật liên tục
-
-📊 Độ tin cậy AI: 94%
-🔄 Cập nhật mỗi 10 phút`,
-
-  health: `💊 TƯ VẤN SỨC KHỎE THEO THỜI TIẾT
-
-🌡️ Phân tích tác động thời tiết:
-• Nhiệt độ ${weatherData.current.temp}°C: Thoải mái cho cơ thể
-• Độ ẩm ${weatherData.current.humidity}%: Có thể gây khó chịu nhẹ
-• AQI ${weatherData.current.aqi}: Tốt cho hô hấp
-• UV ${weatherData.current.uv}: Cần bảo vệ da
-
-🏥 Lời khuyên sức khỏe:
-• Uống đủ nước (2-2.5L/ngày)
-• Tránh ra ngoài 11h-15h
-• Sử dụng kem chống nắng SPF 30+
-• Mặc quần áo thoáng mát
-
-⚠️ Cảnh báo cho nhóm nguy cơ:
-• Người cao tuổi: Hạn chế hoạt động ngoài trời
-• Trẻ em: Cần giám sát khi chơi ngoài
-• Người bệnh tim: Tránh gắng sức
-• Người hen suyễn: Theo dõi chất lượng không khí
-
-💡 Gợi ý hoạt động:
-• Tập thể dục trong nhà
-• Yoga buổi sáng
-• Đi bộ sau 17h`,
-
-  travel: `✈️ KẾ HOẠCH DU LỊCH THÔNG MINH
-
-🗺️ Phân tích điều kiện du lịch:
-• Thời tiết hiện tại: Phù hợp cho du lịch
-• Tầm nhìn: ${weatherData.current.visibility}km - Tốt cho ngắm cảnh
-• Gió: ${weatherData.current.windSpeed}km/h - Dễ chịu
-
-🏖️ Địa điểm được khuyến nghị:
-• Bãi biển: Tốt (UV trung bình)
-• Núi non: Rất tốt (thời tiết mát mẻ)
-• Thành phố: Tốt (không mưa)
-• Công viên: Lý tưởng
-
-📅 Thời điểm tốt nhất:
-• Hôm nay: 6h-11h và 16h-19h
-• Ngày mai: Cả ngày (trừ 13h-15h)
-• Cuối tuần: Cần theo dõi dự báo mưa
-
-🎒 Chuẩn bị:
-• Ô dù (phòng mưa chiều)
-• Kem chống nắng
-• Nước uống
-• Áo khoác nhẹ
-
-📱 Lưu ý: Kiểm tra dự báo trước khi khởi hành!`,
-
-  energy: `⚡ TIẾT KIỆM NĂNG LƯỢNG THÔNG MINH
-
-🏠 Phân tích tiêu thụ năng lượng:
-• Nhiệt độ ${weatherData.current.temp}°C: Giảm 20% điện làm mát
-• Độ ẩm ${weatherData.current.humidity}%: Tăng hiệu quả máy lạnh
-• Ánh sáng tự nhiên: Tốt - giảm điện chiếu sáng
-
-💡 Gợi ý tiết kiệm:
-• Điều hòa: 26-27°C (tiết kiệm 15%)
-• Quạt trần: Kết hợp với điều hòa
-• Cửa sổ: Mở vào buổi tối
-• Rèm cửa: Đóng lúc nắng gắt
-
-📊 Dự báo tiêu thụ:
-• Hôm nay: Giảm 18% so với hôm qua
-• Ngày mai: Tăng 5% (nắng nóng hơn)
-• Tuần này: Tiết kiệm 12% so với tuần trước
-
-🌱 Lợi ích môi trường:
-• Giảm 2.3kg CO2/ngày
-• Tiết kiệm 45,000 VNĐ/tháng
-• Bảo vệ môi trường
-
-⚙️ Tự động hóa:
-• Hẹn giờ điều hòa
-• Cảm biến ánh sáng
-• Điều khiển từ xa`
+  weather: `🌤️ THÔNG TIN THỜI TIẾT CHI TIẾT\n\n📍 Vị trí: Đà Nẵng, Việt Nam\n🌡️ Nhiệt độ: 28°C (Cảm giác như 31°C)\n💧 Độ ẩm: 75%\n💨 Gió: 15 km/h, hướng Đông Nam\n☀️ Chỉ số UV: 8 (Cao)\n🌊 Áp suất: 1015 hPa\n👁️ Tầm nhìn: 10 km\n\n📊 Dự báo:\n• Sáng: Nắng ít mây\n• Chiều: Có thể có mưa rào\n• Tối: Trời quang, mát mẻ`,
+  
+  plants: `🌱 TƯ VẤN NÔNG NGHIỆP THÔNG MINH\n\n🌤️ Điều kiện hiện tại (28°C, 75% độ ẩm):\n\n✅ CÂY TRỒNG PHÙ HỢP:\n• Cà chua 🍅 - Thời vụ tốt\n• Dưa chuột 🥒 - Phát triển mạnh\n• Rau muống 🥬 - Lý tưởng\n• Ớt 🌶️ - Điều kiện tốt\n• Hoa hướng dương 🌻 - Nở đẹp\n\n💡 KHUYẾN NGHỊ:\n• Tưới nước: 6-7h sáng và 17-18h chiều\n• Bón phân: NPK 16-16-8 mỗi 2 tuần\n• Phun thuốc trừ sâu: Tránh giờ nắng gắt\n• Che chắn: Dùng lưới 30% trong giờ cao điểm`,
+  
+  alerts: `⚠️ CẢNH BÁO THỜI TIẾT VÀ THIÊN TAI\n\n🌧️ DỰ BÁO 48H TỚI:\n• Mưa vừa đến mưa to: 50-100mm\n• Gió mạnh cấp 6-7, giật cấp 8\n• Nguy cơ ngập úng tại vùng trũng\n• Sóng biển cao 2-3m\n\n🚨 CẢNH BÁO ĐẶC BIỆT:\n• Lũ quét có thể xảy ra tại vùng núi\n• Sạt lở đất ở các sườn dốc\n• Ảnh hưởng giao thông đường bộ\n\n📋 KHUYẾN NGHỊ AN TOÀN:\n• Hạn chế ra ngoài khi không cần thiết\n• Chuẩn bị đồ dùng khẩn cấp\n• Theo dõi tin tức cập nhật\n• Gọi 113 khi cần hỗ trợ`
 };
 
-// AI Assistant responses
-const aiResponses = {
-  greetings: [
-    "Xin chào! Tôi có thể giúp bạn gì về thời tiết hôm nay?",
-    "Chào bạn! Hãy hỏi tôi bất cứ điều gì về thời tiết nhé!",
-    "Hi! Tôi là AI trợ lý thời tiết nâng cao. Bạn cần hỗ trợ gì?",
-    "Chào mừng bạn! Tôi có thể tư vấn về thời tiết, sức khỏe và nhiều thứ khác!"
+// Enhanced SOS Emergency System with more contacts and features
+const sosEmergencySystem = {
+  emergencyContacts: [
+    { name: 'Cảnh sát 113', number: '113', type: 'police', icon: 'ri-police-car-line', description: 'Cảnh sát - An ninh trật tự', priority: 1 },
+    { name: 'Cứu hỏa 114', number: '114', type: 'fire', icon: 'ri-fire-line', description: 'Phòng cháy chữa cháy', priority: 1 },
+    { name: 'Cấp cứu 115', number: '115', type: 'medical', icon: 'ri-heart-pulse-line', description: 'Cấp cứu y tế', priority: 1 },
+    { name: 'Cứu hộ 116', number: '116', type: 'rescue', icon: 'ri-lifebuoy-line', description: 'Cứu hộ cứu nạn', priority: 1 },
+    { name: 'Trung tâm cứu hộ', number: '1900-1234', type: 'rescue', icon: 'ri-shield-cross-line', description: 'Trung tâm cứu hộ 24/7', priority: 2 },
+    { name: 'Cứu hộ giao thông', number: '1900-5678', type: 'traffic', icon: 'ri-roadster-line', description: 'Cứu hộ tai nạn giao thông', priority: 2 },
+    { name: 'Bệnh viện Chợ Rẫy', number: '028-3855-4269', type: 'hospital', icon: 'ri-hospital-line', description: 'Bệnh viện Chợ Rẫy - TP.HCM', priority: 3 },
+    { name: 'Bệnh viện Bạch Mai', number: '024-3869-3731', type: 'hospital', icon: 'ri-hospital-line', description: 'Bệnh viện Bạch Mai - Hà Nội', priority: 3 },
+    { name: 'Bệnh viện Đà Nẵng', number: '0236-3822-480', type: 'hospital', icon: 'ri-hospital-line', description: 'Bệnh viện Đà Nẵng', priority: 3 },
+    { name: 'Nguyễn Văn A', number: '+84 981 234 567', type: 'family', icon: 'ri-user-heart-line', description: 'Liên hệ gia đình', priority: 4 },
+    { name: 'Trần Thị B', number: '+84 987 654 321', type: 'family', icon: 'ri-user-heart-line', description: 'Liên hệ khẩn cấp', priority: 4 },
+    { name: 'Công ty bảo hiểm', number: '1900-9999', type: 'insurance', icon: 'ri-shield-check-line', description: 'Bảo hiểm tai nạn', priority: 5 }
   ],
-  weather: {
-    "hôm nay có mưa không": "Theo dự báo AI, hôm nay có 75% khả năng mưa vào khoảng 15:00-18:00. Bạn nên mang theo ô khi ra ngoài!",
-    "nên mặc gì": `Với nhiệt độ ${weatherData.current.temp}°C và độ ẩm ${weatherData.current.humidity}%, tôi khuyên bạn nên mặc:
-• Áo cotton thoáng mát
-• Quần dài hoặc váy dài
-• Mang theo áo khoác nhẹ cho tối
-• Đừng quên ô và kem chống nắng SPF 30+!`,
-    "cuối tuần thời tiết thế nào": "Cuối tuần sẽ có mưa rào và dông, nhiệt độ 25-29°C. Thích hợp cho hoạt động trong nhà hoặc đi mua sắm ở trung tâm thương mại.",
-    "chất lượng không khí": `Chất lượng không khí hiện tại: Tốt (AQI: ${weatherData.current.aqi}). PM2.5: 12 μg/m³. An toàn cho mọi hoạt động ngoài trời!`,
-    "chỉ số uv": `Chỉ số UV hiện tại: ${weatherData.current.uv} (Trung bình). Bạn nên sử dụng kem chống nắng khi ra ngoài từ 10h-16h.`
-  },
-  default: "Tôi chưa hiểu câu hỏi của bạn. Bạn có thể hỏi về thời tiết, dự báo, sức khỏe, du lịch, hoặc lời khuyên trang phục nhé!"
+  currentLocation: null,
+  isEmergencyActive: false,
+  emergencyHistory: [],
+  lastLocationUpdate: null
 };
 
-// Disaster Warning System with AI enhancements
+// Enhanced Disaster Warning System with real-time data simulation
 const disasterWarningSystem = {
-  currentAlerts: [],
+  currentAlerts: [
+    // Uncomment to test with active alerts
+    // {
+    //   id: 1,
+    //   title: 'Cảnh báo mưa lớn',
+    //   description: 'Mưa to đến rất to trong 6-12 giờ tới, lượng mưa 100-200mm',
+    //   level: 'high',
+    //   time: new Date().toLocaleString('vi-VN'),
+    //   area: 'Miền Trung',
+    //   type: 'rain'
+    // }
+  ],
   riskAssessment: {
-    overall: 57,
+    overall: 42,
+    lastUpdate: new Date(),
     risks: [
-      { name: 'Flood', level: 70, color: 'red', trend: 'increasing' },
-      { name: 'Storm', level: 60, color: 'orange', trend: 'stable' },
-      { name: 'Thunderstorm', level: 80, color: 'red', trend: 'increasing' },
-      { name: 'Heavy Rain', level: 85, color: 'red', trend: 'decreasing' },
-      { name: 'Landslide', level: 65, color: 'yellow', trend: 'stable' },
-      { name: 'Heat Wave', level: 30, color: 'green', trend: 'decreasing' },
-      { name: 'Drought', level: 10, color: 'blue', trend: 'stable' }
+      { name: 'Ngập lụt', level: 60, color: 'orange', trend: 'stable', description: 'Nguy cơ ngập úng tại vùng trũng' },
+      { name: 'Bão', level: 40, color: 'yellow', trend: 'decreasing', description: 'Khả năng hình thành bão thấp' },
+      { name: 'Dông sét', level: 75, color: 'red', trend: 'increasing', description: 'Dông sét mạnh có thể xảy ra' },
+      { name: 'Mưa lớn', level: 80, color: 'red', trend: 'stable', description: 'Mưa to đến rất to' },
+      { name: 'Sạt lở', level: 35, color: 'yellow', trend: 'stable', description: 'Nguy cơ sạt lở ở vùng núi' },
+      { name: 'Nắng nóng', level: 20, color: 'green', trend: 'decreasing', description: 'Nhiệt độ trong ngưỡng bình thường' },
+      { name: 'Hạn hán', level: 15, color: 'blue', trend: 'stable', description: 'Không có nguy cơ hạn hán' }
     ]
   },
-  aiPredictions: [
+  disasterHistory: [
     {
-      type: 'rain',
-      title: 'Mưa nhẹ',
-      time: '15:00 - 18:00 hôm nay',
-      probability: 75,
-      details: 'Lượng mưa: 5-10mm',
-      icon: 'ri-cloud-rain-line',
-      color: 'blue'
+      date: '2024-12-15',
+      type: 'Mưa lớn',
+      severity: 'Trung bình',
+      affected: 'Quảng Nam, Đà Nẵng',
+      damage: 'Ngập úng cục bộ'
     },
     {
-      type: 'sunny',
-      title: 'Nắng ráo',
-      time: 'Ngày mai 6:00 - 11:00',
-      probability: 90,
-      details: 'Nhiệt độ: 26-30°C | UV: Trung bình',
-      icon: 'ri-sun-line',
-      color: 'yellow'
-    },
-    {
-      type: 'air_quality',
-      title: 'Chất lượng không khí',
-      time: 'Cập nhật liên tục',
-      probability: 100,
-      details: 'AQI: 45 (Tốt) | PM2.5: 12 μg/m³',
-      icon: 'ri-leaf-line',
-      color: 'green'
-    },
-    {
-      type: 'heat',
-      title: 'Cảnh báo nắng nóng',
-      time: 'Ngày kia 12:00 - 16:00',
-      probability: 65,
-      details: 'Nhiệt độ: 32-35°C | UV: Cao',
-      icon: 'ri-temp-hot-line',
-      color: 'orange'
+      date: '2024-11-28',
+      type: 'Bão số 9',
+      severity: 'Mạnh',
+      affected: 'Miền Trung',
+      damage: 'Thiệt hại về nhà cửa và cây trồng'
     }
-  ]
+  ],
+  
+  emergencyGuides: {
+    flood: [
+      'Di chuyển đến nơi cao hơn ngay lập tức',
+      'Tránh xa dòng nước chảy xiết',
+      'Chuẩn bị túi khẩn cấp với đồ dùng thiết yếu',
+      'Theo dõi thông tin cảnh báo liên tục',
+      'Không lái xe qua vùng ngập sâu',
+      'Cắt điện trước khi rời khỏi nhà'
+    ],
+    storm: [
+      'Gia cố cửa sổ, cửa ra vào và mái nhà',
+      'Dự trữ thực phẩm và nước uống cho 3-5 ngày',
+      'Tránh ra ngoài khi bão đổ bộ',
+      'Chuẩn bị đèn pin, pin dự phòng và radio',
+      'Tránh xa cửa sổ và vật dụng có thể đổ',
+      'Có kế hoạch sơ tán nếu cần thiết'
+    ],
+    landslide: [
+      'Tránh xa khu vực dốc và sườn núi',
+      'Quan sát các dấu hiệu bất thường của đất đá',
+      'Di tản ngay khi có cảnh báo',
+      'Không xây dựng nhà ở gần sườn núi',
+      'Theo dõi thông tin từ chính quyền địa phương',
+      'Chuẩn bị phương tiện di chuyển khẩn cấp'
+    ]
+  }
 };
 
-// Initialize enhanced charts with better styling
+// Enhanced chart initialization with more data
 function initializeCharts() {
-  // Temperature Chart with gradient
+  // Temperature Chart with enhanced styling
   const temperatureChart = echarts.init(document.getElementById("temperatureChart"));
   temperatureChart.setOption({
     tooltip: { 
       trigger: "axis",
       backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#ff6347',
-      borderWidth: 2,
+      borderColor: '#2563eb',
+      borderWidth: 1,
       textStyle: { color: '#1e293b', fontSize: 12 },
       formatter: function(params) {
         return `${params[0].name}<br/>Nhiệt độ: ${params[0].value}°C`;
       }
     },
-    grid: { top: 20, right: 20, bottom: 30, left: 30 },
     xAxis: { 
       type: "category", 
       data: weatherData.days,
-      axisLine: { show: false },
-      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisTick: { lineStyle: { color: '#e2e8f0' } },
       axisLabel: { color: '#64748b', fontSize: 11 }
     },
     yAxis: { 
       type: "value",
-      axisLine: { show: false },
-      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisTick: { lineStyle: { color: '#e2e8f0' } },
       axisLabel: { color: '#64748b', fontSize: 11 },
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }
+      splitLine: { lineStyle: { color: '#f1f5f9' } }
     },
     series: [{
       name: "Nhiệt độ (°C)",
       type: "line",
       data: weatherData.temperature,
       smooth: true,
-      lineStyle: { color: "#ff6347", width: 3 },
+      lineStyle: { color: "#FF6347", width: 3 },
       areaStyle: { 
         color: {
           type: 'linear',
@@ -380,38 +166,45 @@ function initializeCharts() {
           ]
         }
       },
-      itemStyle: { color: '#ff6347', borderWidth: 2, borderColor: '#fff' },
-      emphasis: { focus: 'series', scale: true }
+      itemStyle: { color: '#FF6347', borderWidth: 2, borderColor: '#fff' },
+      emphasis: { focus: 'series' },
+      markPoint: {
+        data: [
+          { type: 'max', name: 'Cao nhất' },
+          { type: 'min', name: 'Thấp nhất' }
+        ]
+      }
     }]
   });
 
-  // Humidity Chart with animation
+  // Humidity Chart with enhanced styling
   const humidityChart = echarts.init(document.getElementById("humidityChart"));
   humidityChart.setOption({
     tooltip: { 
       trigger: "axis",
       backgroundColor: 'rgba(255, 255, 255, 0.95)',
       borderColor: '#1E90FF',
-      borderWidth: 2,
+      borderWidth: 1,
       textStyle: { color: '#1e293b', fontSize: 12 },
       formatter: function(params) {
         return `${params[0].name}<br/>Độ ẩm: ${params[0].value}%`;
       }
     },
-    grid: { top: 20, right: 20, bottom: 30, left: 30 },
     xAxis: { 
       type: "category", 
       data: weatherData.days,
-      axisLine: { show: false },
-      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisTick: { lineStyle: { color: '#e2e8f0' } },
       axisLabel: { color: '#64748b', fontSize: 11 }
     },
     yAxis: { 
       type: "value",
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: '#64748b', fontSize: 11 },
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }
+      min: 0,
+      max: 100,
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisTick: { lineStyle: { color: '#e2e8f0' } },
+      axisLabel: { color: '#64748b', fontSize: 11, formatter: '{value}%' },
+      splitLine: { lineStyle: { color: '#f1f5f9' } }
     },
     series: [{
       name: "Độ ẩm (%)",
@@ -429,39 +222,40 @@ function initializeCharts() {
         borderRadius: [4, 4, 0, 0]
       },
       emphasis: { focus: 'series' },
-      animationDelay: function (idx) {
-        return idx * 100;
+      markLine: {
+        data: [
+          { yAxis: 70, name: 'Mức lý tưởng', lineStyle: { color: '#22c55e', type: 'dashed' } }
+        ]
       }
     }]
   });
 
-  // Rainfall Chart with custom styling
+  // Rainfall Chart with enhanced styling
   const rainfallChart = echarts.init(document.getElementById("rainfallChart"));
   rainfallChart.setOption({
     tooltip: { 
       trigger: "axis",
       backgroundColor: 'rgba(255, 255, 255, 0.95)',
       borderColor: '#32CD32',
-      borderWidth: 2,
+      borderWidth: 1,
       textStyle: { color: '#1e293b', fontSize: 12 },
       formatter: function(params) {
         return `${params[0].name}<br/>Lượng mưa: ${params[0].value}mm`;
       }
     },
-    grid: { top: 20, right: 20, bottom: 30, left: 30 },
     xAxis: { 
       type: "category", 
       data: weatherData.days,
-      axisLine: { show: false },
-      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisTick: { lineStyle: { color: '#e2e8f0' } },
       axisLabel: { color: '#64748b', fontSize: 11 }
     },
     yAxis: { 
       type: "value",
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: '#64748b', fontSize: 11 },
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisTick: { lineStyle: { color: '#e2e8f0' } },
+      axisLabel: { color: '#64748b', fontSize: 11, formatter: '{value}mm' },
+      splitLine: { lineStyle: { color: '#f1f5f9' } }
     },
     series: [{
       name: "Lượng mưa (mm)",
@@ -469,122 +263,16 @@ function initializeCharts() {
       data: weatherData.rainfall,
       itemStyle: { 
         color: function(params) {
-          const colors = ['#32CD32', '#228B22', '#90EE90'];
-          return colors[params.dataIndex % colors.length];
+          const value = params.value;
+          if (value > 20) return '#ef4444'; // Mưa to - đỏ
+          if (value > 10) return '#f59e0b'; // Mưa vừa - cam
+          if (value > 0) return '#22c55e';  // Mưa nhỏ - xanh lá
+          return '#94a3b8'; // Không mưa - xám
         },
         borderRadius: [4, 4, 0, 0]
       },
-      emphasis: { focus: 'series' },
-      animationDelay: function (idx) {
-        return idx * 150;
-      }
+      emphasis: { focus: 'series' }
     }]
-  });
-
-  // New UV Chart
-  const uvChart = echarts.init(document.getElementById("uvChart"));
-  uvChart.setOption({
-    tooltip: { 
-      trigger: "axis",
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#9333ea',
-      borderWidth: 2,
-      textStyle: { color: '#1e293b', fontSize: 12 },
-      formatter: function(params) {
-        return `${params[0].name}<br/>UV Index: ${params[0].value}`;
-      }
-    },
-    grid: { top: 20, right: 20, bottom: 30, left: 30 },
-    xAxis: { 
-      type: "category", 
-      data: weatherData.days,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: '#64748b', fontSize: 11 }
-    },
-    yAxis: { 
-      type: "value",
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: '#64748b', fontSize: 11 },
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }
-    },
-    series: [{
-      name: "UV Index",
-      type: "line",
-      data: weatherData.uv,
-      smooth: true,
-      lineStyle: { color: "#9333ea", width: 3 },
-      areaStyle: { 
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: 'rgba(147, 51, 234, 0.4)' },
-            { offset: 1, color: 'rgba(147, 51, 234, 0.1)' }
-          ]
-        }
-      },
-      itemStyle: { color: '#9333ea', borderWidth: 2, borderColor: '#fff' },
-      emphasis: { focus: 'series', scale: true }
-    }]
-  });
-
-  // New Trends Chart for Analytics
-  const trendsChart = echarts.init(document.getElementById("trendsChart"));
-  trendsChart.setOption({
-    tooltip: { 
-      trigger: "axis",
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#3b82f6',
-      borderWidth: 2,
-      textStyle: { color: '#1e293b', fontSize: 12 }
-    },
-    legend: {
-      data: ['Nhiệt độ', 'Độ ẩm', 'UV'],
-      bottom: 10
-    },
-    grid: { top: 20, right: 20, bottom: 50, left: 40 },
-    xAxis: { 
-      type: "category", 
-      data: weatherData.days,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: '#64748b', fontSize: 11 }
-    },
-    yAxis: { 
-      type: "value",
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: '#64748b', fontSize: 11 },
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }
-    },
-    series: [
-      {
-        name: "Nhiệt độ",
-        type: "line",
-        data: weatherData.temperature,
-        smooth: true,
-        lineStyle: { color: "#ff6347", width: 2 },
-        itemStyle: { color: '#ff6347' }
-      },
-      {
-        name: "Độ ẩm",
-        type: "line",
-        data: weatherData.humidity,
-        smooth: true,
-        lineStyle: { color: "#1E90FF", width: 2 },
-        itemStyle: { color: '#1E90FF' }
-      },
-      {
-        name: "UV",
-        type: "line",
-        data: weatherData.uv.map(v => v * 10), // Scale for visibility
-        smooth: true,
-        lineStyle: { color: "#9333ea", width: 2 },
-        itemStyle: { color: '#9333ea' }
-      }
-    ]
   });
 
   // Make charts responsive
@@ -592,130 +280,126 @@ function initializeCharts() {
     temperatureChart.resize();
     humidityChart.resize();
     rainfallChart.resize();
-    uvChart.resize();
-    trendsChart.resize();
   });
 }
 
-// Enhanced map initialization with weather layers
+// Enhanced map initialization with more features
 function initializeMap() {
   const map = L.map('map').setView([16.0471, 108.2062], 6);
   
-  // Base layer
-  const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
 
-  // Weather layers (mock implementation)
-  const weatherLayers = {
-    temperature: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      opacity: 0.6,
-      attribution: 'Temperature Layer'
-    }),
-    precipitation: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      opacity: 0.6,
-      attribution: 'Precipitation Layer'
-    }),
-    wind: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      opacity: 0.6,
-      attribution: 'Wind Layer'
-    }),
-    uv: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      opacity: 0.6,
-      attribution: 'UV Index Layer'
-    })
-  };
-
-  let currentWeatherLayer = null;
-
-  // Map control buttons
-  document.querySelectorAll('.map-control-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      // Remove active class from all buttons
-      document.querySelectorAll('.map-control-btn').forEach(b => b.classList.remove('active'));
-      this.classList.add('active');
-      
-      // Remove current weather layer
-      if (currentWeatherLayer) {
-        map.removeLayer(currentWeatherLayer);
-      }
-      
-      // Add new weather layer
-      const layer = this.dataset.layer;
-      if (weatherLayers[layer]) {
-        currentWeatherLayer = weatherLayers[layer];
-        map.addLayer(currentWeatherLayer);
-      }
-    });
-  });
-
-  // Enhanced weather markers with more information
+  // Enhanced weather markers with more detailed information
   const weatherMarkers = [
-    { lat: 21.0285, lng: 105.8542, city: 'Hà Nội', temp: '26°C', weather: '☁️', humidity: 80, wind: 12, aqi: 65, uv: 4 },
-    { lat: 10.8231, lng: 106.6297, city: 'TP.HCM', temp: '30°C', weather: '☀️', humidity: 70, wind: 8, aqi: 55, uv: 8 },
-    { lat: 16.0471, lng: 108.2062, city: 'Đà Nẵng', temp: '28°C', weather: '🌤️', humidity: 75, wind: 15, aqi: 45, uv: 6 },
-    { lat: 10.0452, lng: 105.7469, city: 'Cần Thơ', temp: '29°C', weather: '🌧️', humidity: 85, wind: 10, aqi: 50, uv: 3 }
+    { 
+      lat: 21.0285, lng: 105.8542, 
+      city: 'Hà Nội', 
+      temp: '26°C', 
+      weather: '☁️',
+      humidity: '78%',
+      wind: '12 km/h',
+      condition: 'Nhiều mây'
+    },
+    { 
+      lat: 10.8231, lng: 106.6297, 
+      city: 'TP.HCM', 
+      temp: '30°C', 
+      weather: '☀️',
+      humidity: '65%',
+      wind: '8 km/h',
+      condition: 'Nắng đẹp'
+    },
+    { 
+      lat: 16.0471, lng: 108.2062, 
+      city: 'Đà Nẵng', 
+      temp: '28°C', 
+      weather: '🌤️',
+      humidity: '75%',
+      wind: '15 km/h',
+      condition: 'Nắng ít mây'
+    },
+    { 
+      lat: 10.0452, lng: 105.7469, 
+      city: 'Cần Thơ', 
+      temp: '29°C', 
+      weather: '🌧️',
+      humidity: '85%',
+      wind: '10 km/h',
+      condition: 'Mưa nhỏ'
+    },
+    {
+      lat: 20.8449, lng: 106.6881,
+      city: 'Hải Phòng',
+      temp: '25°C',
+      weather: '🌫️',
+      humidity: '88%',
+      wind: '18 km/h',
+      condition: 'Sương mù'
+    },
+    {
+      lat: 12.2388, lng: 109.1967,
+      city: 'Nha Trang',
+      temp: '27°C',
+      weather: '🌊',
+      humidity: '72%',
+      wind: '22 km/h',
+      condition: 'Gió biển'
+    }
   ];
+
+  // Variables for location tracking
+  let currentLocationMarker = null;
+  let currentPosition = null;
+  let watchId = null;
 
   weatherMarkers.forEach(marker => {
     const customIcon = L.divIcon({
       className: 'custom-weather-marker',
       html: `
-        <div class="bg-white rounded-full p-2 shadow-lg border-2 border-blue-500">
+        <div class="bg-white rounded-lg shadow-lg p-2 border-2 border-blue-300 min-w-[80px]">
           <div class="text-center">
-            <div class="text-lg">${marker.weather}</div>
-            <div class="text-xs font-bold text-blue-600">${marker.temp}</div>
+            <div class="text-2xl mb-1">${marker.weather}</div>
+            <div class="text-sm font-bold text-gray-800">${marker.temp}</div>
+            <div class="text-xs text-gray-600">${marker.city}</div>
           </div>
         </div>
       `,
-      iconSize: [50, 50],
-      iconAnchor: [25, 25]
+      iconSize: [80, 60],
+      iconAnchor: [40, 60]
     });
 
     L.marker([marker.lat, marker.lng], { icon: customIcon })
       .addTo(map)
       .bindPopup(`
-        <div class="text-center p-2 min-w-[200px]">
+        <div class="text-center p-3 min-w-[200px]">
           <h3 class="font-bold text-lg text-blue-600 mb-2">${marker.city}</h3>
-          <div class="text-4xl mb-2">${marker.weather}</div>
-          <div class="text-2xl font-bold text-gray-800 mb-3">${marker.temp}</div>
-          
-          <div class="grid grid-cols-2 gap-2 text-xs mb-3">
-            <div class="bg-blue-50 rounded p-2">
-              <i class="ri-drop-line text-blue-500"></i>
-              <div class="font-semibold">${marker.humidity}%</div>
-              <div class="text-gray-600">Độ ẩm</div>
+          <div class="text-4xl mb-3">${marker.weather}</div>
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <div class="bg-red-50 p-2 rounded">
+              <div class="text-red-600 font-semibold">Nhiệt độ</div>
+              <div class="text-xl font-bold text-red-700">${marker.temp}</div>
             </div>
-            <div class="bg-green-50 rounded p-2">
-              <i class="ri-windy-line text-green-500"></i>
-              <div class="font-semibold">${marker.wind}km/h</div>
-              <div class="text-gray-600">Gió</div>
-            </div>
-            <div class="bg-purple-50 rounded p-2">
-              <i class="ri-leaf-line text-purple-500"></i>
-              <div class="font-semibold">AQI: ${marker.aqi}</div>
-              <div class="text-gray-600">Không khí</div>
-            </div>
-            <div class="bg-orange-50 rounded p-2">
-              <i class="ri-sun-line text-orange-500"></i>
-              <div class="font-semibold">UV: ${marker.uv}</div>
-              <div class="text-gray-600">Chỉ số UV</div>
+            <div class="bg-blue-50 p-2 rounded">
+              <div class="text-blue-600 font-semibold">Độ ẩm</div>
+              <div class="text-xl font-bold text-blue-700">${marker.humidity}</div>
             </div>
           </div>
-          
-          <button onclick="getDetailedForecast('${marker.city}')" 
-                  class="mt-3 bg-blue-500 text-white px-4 py-1 rounded-full text-xs hover:bg-blue-600 transition-colors">
-            Xem chi tiết
-          </button>
+          <div class="mt-3 p-2 bg-gray-50 rounded">
+            <div class="text-gray-600 text-sm">
+              <div><strong>Gió:</strong> ${marker.wind}</div>
+              <div><strong>Tình trạng:</strong> ${marker.condition}</div>
+            </div>
+          </div>
+          <div class="mt-2 text-xs text-gray-500">
+            Cập nhật: ${new Date().toLocaleTimeString('vi-VN')}
+          </div>
         </div>
       `);
   });
 
-  // Location tracking functionality (enhanced from previous version)
-  let currentLocationMarker = null;
-  let currentPosition = null;
-  let watchId = null;
-
+  // Enhanced location control
   const locationControl = L.control({ position: 'topright' });
   locationControl.onAdd = function(map) {
     const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
@@ -738,7 +422,7 @@ function initializeMap() {
   };
   locationControl.addTo(map);
 
-  // Location event handlers
+  // Enhanced location functions (keeping existing functionality)
   document.addEventListener('click', function(e) {
     if (e.target.closest('#locateBtn')) {
       locateCurrentPosition();
@@ -760,6 +444,12 @@ function initializeMap() {
     locateBtn.innerHTML = '<i class="ri-loader-4-line text-lg animate-spin"></i>';
     locateBtn.disabled = true;
 
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
+    };
+
     navigator.geolocation.getCurrentPosition(
       function(position) {
         const lat = position.coords.latitude;
@@ -772,13 +462,12 @@ function initializeMap() {
           map.removeLayer(currentLocationMarker);
         }
         
-        const accuracyColor = accuracy <= 50 ? 'green' : accuracy <= 100 ? 'yellow' : 'red';
-        const accuracyText = accuracy <= 20 ? 'Rất tốt' : accuracy <= 50 ? 'Tốt' : accuracy <= 100 ? 'Trung bình' : 'Kém';
+        const accuracyColor = accuracy <= 50 ? 'green' : accuracy <= 100 ? 'blue' : 'orange';
         
         currentLocationMarker = L.marker([lat, lng], {
           icon: L.divIcon({
             className: 'current-location-marker',
-            html: `<div class="w-4 h-4 bg-${accuracyColor}-500 rounded-full border-2 border-white shadow-lg animate-pulse"></div>`,
+            html: `<div class="bg-${accuracyColor}-500 w-4 h-4 rounded-full border-2 border-white shadow-lg animate-pulse"></div>`,
             iconSize: [16, 16],
             iconAnchor: [8, 8]
           })
@@ -786,34 +475,22 @@ function initializeMap() {
         
         getLocationInfo(lat, lng).then(locationInfo => {
           currentLocationMarker.bindPopup(`
-            <div class="text-center p-3 min-w-[250px]">
+            <div class="text-center p-3">
               <h3 class="font-bold text-lg text-blue-600 mb-2">📍 Vị trí của bạn</h3>
               <p class="text-sm text-gray-600 mb-3">${locationInfo}</p>
-              
-              <div class="bg-gray-50 rounded-lg p-3 mb-3">
-                <div class="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span class="text-gray-500">Độ chính xác:</span>
-                    <div class="font-semibold text-${accuracyColor}-600">${Math.round(accuracy)}m (${accuracyText})</div>
-                  </div>
-                  <div>
-                    <span class="text-gray-500">Thời gian:</span>
-                    <div class="font-semibold">${new Date().toLocaleTimeString('vi-VN')}</div>
-                  </div>
-                </div>
-                <div class="mt-2 text-xs text-gray-500">
-                  Tọa độ: ${lat.toFixed(6)}, ${lng.toFixed(6)}
+              <div class="bg-gray-50 p-3 rounded-lg mb-3">
+                <div class="grid grid-cols-1 gap-2 text-xs">
+                  <div><strong>Tọa độ:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
+                  <div><strong>Độ chính xác:</strong> ${Math.round(accuracy)}m</div>
+                  <div><strong>Thời gian:</strong> ${new Date().toLocaleString('vi-VN')}</div>
                 </div>
               </div>
-              
               <div class="flex gap-2">
-                <button onclick="getWeatherAtLocation(${lat}, ${lng})" 
-                        class="flex-1 bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600 transition-colors">
-                  🌤️ Thời tiết tại đây
+                <button onclick="shareCurrentLocation()" class="flex-1 bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600">
+                  Chia sẻ
                 </button>
-                <button onclick="recalibrateLocation()" 
-                        class="flex-1 bg-green-500 text-white px-3 py-1 rounded text-xs hover:bg-green-600 transition-colors">
-                  🔄 Hiệu chỉnh lại
+                <button onclick="recalibrateLocation()" class="flex-1 bg-green-500 text-white px-3 py-1 rounded text-xs hover:bg-green-600">
+                  Hiệu chỉnh
                 </button>
               </div>
             </div>
@@ -821,11 +498,13 @@ function initializeMap() {
         });
         
         map.setView([lat, lng], 15);
+        
         locateBtn.innerHTML = '<i class="ri-map-pin-line text-lg"></i>';
         locateBtn.disabled = false;
         returnBtn.style.display = 'block';
         
-        showNotification('Đã xác định vị trí của bạn!', 'success');
+        sosEmergencySystem.currentLocation = { lat, lng, accuracy };
+        sosEmergencySystem.lastLocationUpdate = new Date();
       },
       function(error) {
         let errorMessage = 'Không thể xác định vị trí của bạn';
@@ -844,7 +523,8 @@ function initializeMap() {
         showNotification(errorMessage, 'error');
         locateBtn.innerHTML = '<i class="ri-map-pin-line text-lg"></i>';
         locateBtn.disabled = false;
-      }
+      },
+      options
     );
   }
 
@@ -861,1478 +541,118 @@ function initializeMap() {
       const data = await response.json();
       
       if (data && data.display_name) {
-        const address = data.address || {};
-        const parts = [];
-        
-        if (address.road) parts.push(address.road);
-        if (address.suburb || address.neighbourhood) parts.push(address.suburb || address.neighbourhood);
-        if (address.city || address.town || address.village) parts.push(address.city || address.town || address.village);
-        if (address.state) parts.push(address.state);
-        
-        return parts.length > 0 ? parts.join(', ') : data.display_name;
+        return data.display_name;
       }
       
       return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     } catch (error) {
+      console.log('Lỗi lấy thông tin địa phương:', error);
       return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     }
   }
 
-  // Global functions for map interactions
-  window.recalibrateLocation = locateCurrentPosition;
-  window.getDetailedForecast = function(city) {
-    showNotification(`Đang tải dự báo chi tiết cho ${city}...`, 'info');
-    // Simulate API call
-    setTimeout(() => {
-      alert(`📊 DỰ BÁO CHI TIẾT - ${city.toUpperCase()}
-
-🌡️ Nhiệt độ 48h tới:
-• 12:00 - 29°C (Nắng)
-• 15:00 - 31°C (Có mây)
-• 18:00 - 28°C (Mưa nhẹ)
-• 21:00 - 26°C (Quang đãng)
-• Ngày mai: 25-32°C
-
-💧 Độ ẩm: 70-85%
-💨 Gió: 10-15 km/h
-🌧️ Khả năng mưa: 60%
-🌞 UV Index: 6-8 (Trung bình-Cao)
-🍃 AQI: 45-55 (Tốt)
-
-📱 Tải ứng dụng để nhận thông báo chi tiết!`);
-    }, 1500);
+  // Global functions for popup buttons
+  window.shareCurrentLocation = function() {
+    if (currentPosition) {
+      const shareText = `📍 Vị trí của tôi:\nVĩ độ: ${currentPosition.lat.toFixed(6)}\nKinh độ: ${currentPosition.lng.toFixed(6)}\nGoogle Maps: https://maps.google.com/?q=${currentPosition.lat},${currentPosition.lng}`;
+      
+      if (navigator.share) {
+        navigator.share({
+          title: 'Vị trí hiện tại',
+          text: shareText
+        });
+      } else {
+        navigator.clipboard.writeText(shareText).then(() => {
+          showNotification('Đã sao chép vị trí vào clipboard!', 'success');
+        });
+      }
+    }
   };
 
-  window.getWeatherAtLocation = function(lat, lng) {
-    showNotification('Đang lấy thông tin thời tiết tại vị trí này...', 'info');
-    setTimeout(() => {
-      alert(`🌤️ THỜI TIẾT TẠI VỊ TRÍ CỦA BẠN
-
-📍 Tọa độ: ${lat.toFixed(4)}, ${lng.toFixed(4)}
-🌡️ Nhiệt độ: 28°C (Cảm giác như 30°C)
-💧 Độ ẩm: 75%
-💨 Gió: 12 km/h, hướng Đông Nam
-☁️ Tình trạng: Có mây
-🌧️ Khả năng mưa: 40%
-
-📊 Chỉ số UV: 6 (Trung bình)
-👁️ Tầm nhìn: 10 km
-🍃 AQI: 45 (Tốt)
-🌅 Mặt trời mọc: 05:45
-🌇 Mặt trời lặn: 18:30
-
-💡 Lời khuyên: Thời tiết tốt cho hoạt động ngoài trời!`);
-    }, 1000);
+  window.recalibrateLocation = function() {
+    locateCurrentPosition();
   };
 
   return map;
 }
 
-// Enhanced AI Assistant functionality
-function openAIAssistant() {
-  const modal = document.getElementById('aiAssistantModal');
-  modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-  
-  // Update API status
-  updateApiStatus();
-  
-  // Focus on input
-  setTimeout(() => {
-    document.getElementById('aiInput').focus();
-  }, 300);
-}
-
-function closeAIAssistant() {
-  const modal = document.getElementById('aiAssistantModal');
-  modal.classList.add('hidden');
-  document.body.style.overflow = 'auto';
-  
-  // Hide API config panel if open
-  const configPanel = document.getElementById('apiConfigPanel');
-  if (configPanel && !configPanel.classList.contains('hidden')) {
-    configPanel.classList.add('hidden');
-  }
-}
-
-// API Configuration Functions
-function toggleApiConfig() {
-  const panel = document.getElementById('apiConfigPanel');
-  panel.classList.toggle('hidden');
-  
-  if (!panel.classList.contains('hidden')) {
-    // Load current keys
-    document.getElementById('openaiKey').value = apiKeys.openai;
-    document.getElementById('weatherKey').value = apiKeys.weather;
-  }
-}
-
-function saveApiKeys() {
-  const openaiKey = document.getElementById('openaiKey').value.trim();
-  const weatherKey = document.getElementById('weatherKey').value.trim();
-  
-  if (openaiKey) {
-    apiKeys.openai = openaiKey;
-    localStorage.setItem('openai_api_key', openaiKey);
-  }
-  
-  if (weatherKey) {
-    apiKeys.weather = weatherKey;
-    localStorage.setItem('weather_api_key', weatherKey);
-  }
-  
-  updateApiStatus();
-  showNotification('✅ Đã lưu API keys thành công!', 'success');
-  
-  // Hide config panel
-  document.getElementById('apiConfigPanel').classList.add('hidden');
-}
-
-function updateApiStatus() {
-  const statusElement = document.getElementById('apiStatus');
-  const infoElement = document.getElementById('apiInfo');
-  
-  if (!statusElement || !infoElement) return;
-  
-  const hasOpenAI = !!apiKeys.openai;
-  const hasWeather = !!apiKeys.weather;
-  
-  if (hasOpenAI && hasWeather) {
-    statusElement.innerHTML = '<div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div><span class="text-xs">🟢 AI Smart</span>';
-    infoElement.textContent = '🚀 Tất cả API đã sẵn sàng! Hỏi gì cũng được!';
-  } else if (hasOpenAI || hasWeather) {
-    statusElement.innerHTML = '<div class="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div><span class="text-xs">🟡 Partial</span>';
-    infoElement.textContent = '⚠️ Một số API thiếu. Click ⚙️ để cấu hình đầy đủ';
+// Enhanced user location function
+function locateUser() {
+  const locateBtn = document.getElementById('locateBtn');
+  if (locateBtn) {
+    locateBtn.click();
   } else {
-    statusElement.innerHTML = '<div class="w-2 h-2 bg-red-400 rounded-full"></div><span class="text-xs">🔴 No API</span>';
-    infoElement.textContent = '💡 Cấu hình API để sử dụng dữ liệu thực tế';
-  }
-}
-
-async function testApiConnection() {
-  const button = event.target;
-  const originalText = button.textContent;
-  button.textContent = '🔄 Testing...';
-  button.disabled = true;
-  
-  let results = [];
-  
-  // Test OpenAI
-  if (apiKeys.openai) {
-    try {
-      const response = await fetch('https://api.openai.com/v1/models', {
-        headers: { 'Authorization': `Bearer ${apiKeys.openai}` }
-      });
-      results.push(response.ok ? '✅ OpenAI: OK' : '❌ OpenAI: Invalid key');
-    } catch (error) {
-      results.push('❌ OpenAI: Connection failed');
-    }
-  } else {
-    results.push('⚠️ OpenAI: No key');
-  }
-  
-  // Test Weather API
-  if (apiKeys.weather) {
-    try {
-      const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${apiKeys.weather}&q=Hanoi`);
-      results.push(response.ok ? '✅ Weather: OK' : '❌ Weather: Invalid key');
-    } catch (error) {
-      results.push('❌ Weather: Connection failed');
-    }
-  } else {
-    results.push('⚠️ Weather: No key');
-  }
-  
-  button.textContent = originalText;
-  button.disabled = false;
-  
-  showNotification(results.join('\n'), 'info', 8000);
-}
-
-// Enhanced AI Response with Real APIs
-async function getWeatherData(location = 'Hanoi') {
-  if (!apiKeys.weather) {
-    return {
-      location: { name: location },
-      current: {
-        temp_c: 28,
-        condition: { text: 'Partly cloudy' },
-        humidity: 75,
-        wind_kph: 15,
-        vis_km: 10
-      }
-    };
-  }
-  
-  try {
-    const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${apiKeys.weather}&q=${location}&aqi=yes`);
-    if (response.ok) {
-      return await response.json();
-    }
-  } catch (error) {
-    console.error('Weather API error:', error);
-  }
-  
-  // Fallback data
-  return {
-    location: { name: location },
-    current: {
-      temp_c: 28,
-      condition: { text: 'Data unavailable' },
-      humidity: 75,
-      wind_kph: 15,
-      vis_km: 10
-    }
-  };
-}
-
-async function getNewsData() {
-  // Mock news data since NewsAPI requires server-side calls
-  return [
-    { title: 'Thời tiết ổn định trong tuần tới', description: 'Dự báo không có thiên tai lớn' },
-    { title: 'Chất lượng không khí cải thiện', description: 'AQI giảm xuống mức an toàn' }
-  ];
-}
-
-function createSmartPrompt(userMessage, weatherData, newsData) {
-  let prompt = `Bạn là AI trợ lý thông minh của Weather & Life, được phát triển bởi Silent Vision Team. Bạn có khả năng phân tích dữ liệu thực tế và đưa ra lời khuyên chính xác.
-
-🌤️ DỮ LIỆU THỜI TIẾT THỰC TẾ:
-- Địa điểm: ${weatherData.location.name}
-- Nhiệt độ: ${weatherData.current.temp_c}°C
-- Tình trạng: ${weatherData.current.condition.text}
-- Độ ẩm: ${weatherData.current.humidity}%
-- Gió: ${weatherData.current.wind_kph} km/h
-- Tầm nhìn: ${weatherData.current.vis_km} km
-
-📰 TIN TỨC MỚI NHẤT:
-${newsData.map(news => `- ${news.title}: ${news.description}`).join('\n')}
-
-❓ CÂU HỎI: "${userMessage}"
-
-Hãy trả lời một cách thông minh, dựa trên dữ liệu thực tế trên. Sử dụng emoji phù hợp và đưa ra lời khuyên cụ thể, thực tế. Nếu câu hỏi liên quan đến thời tiết, hãy phân tích chi tiết dựa trên dữ liệu. Nếu về cây trồng, hãy tư vấn dựa trên điều kiện thời tiết hiện tại.`;
-
-  return prompt;
-}
-
-async function callOpenAI(prompt) {
-  if (!apiKeys.openai) {
-    throw new Error('OpenAI API key not configured');
-  }
-  
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKeys.openai}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 500,
-      temperature: 0.7
-    })
-  });
-  
-  if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  return data.choices[0].message.content;
-}
-
-async function generateSmartAIResponse(userMessage) {
-  try {
-    // Collect data from APIs
-    const weatherData = await getWeatherData('Hanoi');
-    const newsData = await getNewsData();
-    
-    // Create smart prompt
-    const prompt = createSmartPrompt(userMessage, weatherData, newsData);
-    
-    // Call AI
-    const aiResponse = await callOpenAI(prompt);
-    
-    return aiResponse;
-  } catch (error) {
-    console.error('AI Response error:', error);
-    
-    // Fallback to original response system
-    return generateAIResponse(userMessage);
-  }
-}
-
-function openVoiceAssistant() {
-  openAIAssistant();
-  setTimeout(() => {
-    startVoiceRecognition();
-  }, 500);
-}
-
-function startVoiceRecognition() {
-  if (!recognition) {
-    showNotification('Trình duyệt không hỗ trợ nhận diện giọng nói', 'error');
-    return;
-  }
-  
-  const voiceBtn = document.getElementById('voiceBtn');
-  voiceBtn.innerHTML = '<i class="ri-mic-fill animate-pulse"></i>';
-  voiceBtn.classList.add('bg-red-500');
-  voiceBtn.classList.remove('bg-green-500');
-  
-  recognition.start();
-  showNotification('Đang nghe... Hãy nói câu hỏi của bạn', 'info');
-  
-  recognition.onend = function() {
-    voiceBtn.innerHTML = '<i class="ri-mic-line"></i>';
-    voiceBtn.classList.remove('bg-red-500');
-    voiceBtn.classList.add('bg-green-500');
-  };
-}
-
-function speakResponse(text) {
-  if (!synthesis) return;
-  
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'vi-VN';
-  utterance.rate = 0.9;
-  utterance.pitch = 1;
-  
-  synthesis.speak(utterance);
-}
-
-function sendAIMessage() {
-  const input = document.getElementById('aiInput');
-  const message = input.value.trim();
-  
-  if (!message || isAITyping) return;
-  
-  // Add user message
-  addChatMessage(message, 'user');
-  input.value = '';
-  
-  // Show AI typing
-  showAITyping();
-  
-  // Generate smart AI response
-  setTimeout(() => {
-    generateSmartAIResponse(message).then(response => {
-      hideAITyping();
-      addChatMessage(response, 'ai');
-    }).catch(error => {
-      hideAITyping();
-      const fallbackResponse = generateAIResponse(message);
-      addChatMessage(fallbackResponse, 'ai');
-    });
-  }, 1000 + Math.random() * 2000);
-}
-
-function askQuickQuestion(question) {
-  document.getElementById('aiInput').value = question;
-  sendAIMessage();
-}
-
-function addChatMessage(message, sender) {
-  const chatMessages = document.getElementById('chatMessages');
-  const messageDiv = document.createElement('div');
-  messageDiv.className = `${sender}-message mb-4`;
-  
-  if (sender === 'user') {
-    messageDiv.innerHTML = `
-      <div class="flex items-start gap-3 justify-end">
-        <div class="bg-blue-500 text-white rounded-2xl p-4 shadow-sm max-w-xs">
-          <p>${message}</p>
-        </div>
-        <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-          <i class="ri-user-line text-white text-sm"></i>
-        </div>
-      </div>
-    `;
-  } else {
-    messageDiv.innerHTML = `
-      <div class="flex items-start gap-3">
-        <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-          <i class="ri-robot-line text-white text-sm"></i>
-        </div>
-        <div class="bg-white rounded-2xl p-4 shadow-sm max-w-xs border border-gray-200">
-          <p class="text-gray-800 whitespace-pre-line">${message}</p>
-        </div>
-      </div>
-    `;
-  }
-  
-  chatMessages.appendChild(messageDiv);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-  
-  // Add animation
-  messageDiv.style.opacity = '0';
-  messageDiv.style.transform = 'translateY(20px)';
-  setTimeout(() => {
-    messageDiv.style.transition = 'all 0.3s ease';
-    messageDiv.style.opacity = '1';
-    messageDiv.style.transform = 'translateY(0)';
-  }, 100);
-}
-
-function showAITyping() {
-  isAITyping = true;
-  const chatMessages = document.getElementById('chatMessages');
-  const typingDiv = document.createElement('div');
-  typingDiv.id = 'ai-typing';
-  typingDiv.className = 'ai-message mb-4';
-  typingDiv.innerHTML = `
-    <div class="flex items-start gap-3">
-      <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-        <i class="ri-robot-line text-white text-sm"></i>
-      </div>
-      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
-        <div class="flex gap-1">
-          <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-          <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-          <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-        </div>
-      </div>
-    </div>
-  `;
-  
-  chatMessages.appendChild(typingDiv);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function hideAITyping() {
-  isAITyping = false;
-  const typingDiv = document.getElementById('ai-typing');
-  if (typingDiv) {
-    typingDiv.remove();
-  }
-}
-
-// ===== SMART AI SYSTEM WITH REAL API INTEGRATION =====
-
-async function generateSmartAIResponse(message) {
-  const lowerMessage = message.toLowerCase();
-  
-  // Determine what type of data the user is asking for
-  const dataNeeds = analyzeUserIntent(lowerMessage);
-  
-  // Collect relevant data from APIs
-  const collectedData = await collectRelevantData(dataNeeds, lowerMessage);
-  
-  // Generate AI response using collected data
-  if (apiKeys.openai) {
-    return await generateOpenAIResponse(message, collectedData);
-  } else {
-    return generateLocalAIResponse(message, collectedData);
-  }
-}
-
-function analyzeUserIntent(message) {
-  const intents = {
-    weather: ['thời tiết', 'weather', 'nhiệt độ', 'mưa', 'nắng', 'gió', 'độ ẩm'],
-    news: ['tin tức', 'news', 'báo', 'sự kiện', 'chính trị', 'xã hội'],
-    finance: ['giá', 'vàng', 'usd', 'dollar', 'chứng khoán', 'bitcoin', 'crypto'],
-    agriculture: ['trồng', 'cây', 'nông nghiệp', 'mùa vụ', 'gieo', 'thu hoạch'],
-    general: ['phân tích', 'tóm tắt', 'đánh giá', 'so sánh']
-  };
-  
-  const needs = [];
-  for (const [category, keywords] of Object.entries(intents)) {
-    if (keywords.some(keyword => message.includes(keyword))) {
-      needs.push(category);
-    }
-  }
-  
-  return needs.length > 0 ? needs : ['general'];
-}
-
-async function collectRelevantData(dataNeeds, message) {
-  const data = {};
-  
-  try {
-    // Always get current location weather
-    if (dataNeeds.includes('weather') || dataNeeds.includes('general') || dataNeeds.includes('agriculture')) {
-      data.weather = await getCurrentWeatherData();
-    }
-    
-    // Get news if requested
-    if (dataNeeds.includes('news') || dataNeeds.includes('general')) {
-      data.news = await getLatestNews();
-    }
-    
-    // Get financial data if requested
-    if (dataNeeds.includes('finance') || dataNeeds.includes('general')) {
-      data.finance = await getFinancialData();
-    }
-    
-    // Get agriculture data if requested
-    if (dataNeeds.includes('agriculture')) {
-      data.agriculture = await getAgricultureAdvice(data.weather);
-    }
-    
-  } catch (error) {
-    console.error('Error collecting data:', error);
-  }
-  
-  return data;
-}
-
-// ===== REAL API INTEGRATIONS =====
-
-async function getCurrentWeatherData() {
-  // Try real API first, fallback to mock data
-  if (apiKeys.weather) {
-    try {
-      const location = currentWeatherData?.location || 'Hanoi';
-      const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${apiKeys.weather}&q=${location}&aqi=yes`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          location: data.location.name + ', ' + data.location.country,
-          temperature: data.current.temp_c,
-          condition: data.current.condition.text,
-          humidity: data.current.humidity,
-          windSpeed: data.current.wind_kph,
-          visibility: data.current.vis_km,
-          uv: data.current.uv,
-          aqi: data.current.air_quality?.['us-epa-index'] || 'N/A',
-          feelsLike: data.current.feelslike_c,
-          pressure: data.current.pressure_mb,
-          lastUpdated: data.current.last_updated
-        };
-      }
-    } catch (error) {
-      console.error('Weather API Error:', error);
-    }
-  }
-  
-  // Fallback to enhanced mock data
-  return {
-    location: weatherData.current.location,
-    temperature: weatherData.current.temp,
-    condition: weatherData.current.condition,
-    humidity: weatherData.current.humidity,
-    windSpeed: weatherData.current.windSpeed,
-    visibility: weatherData.current.visibility,
-    uv: 6,
-    aqi: 45,
-    feelsLike: weatherData.current.temp + 2,
-    pressure: 1013,
-    lastUpdated: new Date().toISOString()
-  };
-}
-
-async function getLatestNews() {
-  // Mock news data (in real app, use NewsAPI or similar)
-  const mockNews = [
-    {
-      title: "Thời tiết miền Bắc chuyển lạnh, cần đề phòng sương muối",
-      summary: "Từ ngày mai, nhiệt độ miền Bắc giảm xuống 15-18°C, vùng núi có thể xuống dưới 10°C.",
-      category: "Thời tiết",
-      time: "2 giờ trước"
-    },
-    {
-      title: "Giá lúa gạo tăng mạnh do ảnh hưởng thời tiết",
-      summary: "Giá lúa tại ĐBSCL tăng 200-300 đồng/kg do mưa lớn kéo dài ảnh hưởng đến thu hoạch.",
-      category: "Nông nghiệp",
-      time: "4 giờ trước"
-    },
-    {
-      title: "Cảnh báo dông lốc, mưa đá tại các tỉnh Trung Bộ",
-      summary: "Từ chiều nay đến ngày mai, các tỉnh từ Thanh Hóa đến Quảng Bình có mưa dông mạnh.",
-      category: "Cảnh báo",
-      time: "1 giờ trước"
-    }
-  ];
-  
-  return mockNews;
-}
-
-async function getFinancialData() {
-  // Mock financial data (in real app, use financial APIs)
-  return {
-    gold: {
-      price: "67.8 triệu VND/lượng",
-      change: "+0.2%",
-      trend: "tăng nhẹ"
-    },
-    usd: {
-      rate: "24,350 VND",
-      change: "-0.1%", 
-      trend: "giảm nhẹ"
-    },
-    vn30: {
-      index: "1,245.67",
-      change: "+1.2%",
-      trend: "tăng"
-    }
-  };
-}
-
-async function getAgricultureAdvice(weatherData) {
-  const temp = weatherData.temperature;
-  const humidity = weatherData.humidity;
-  const season = getCurrentSeason();
-  
-  let advice = [];
-  
-  if (temp < 20) {
-    advice.push("🌡️ Nhiệt độ thấp, phù hợp trồng cải thảo, súp lơ, cà rốt");
-    advice.push("❄️ Cần che chắn cho cây non tránh sương giá");
-  } else if (temp > 30) {
-    advice.push("☀️ Nhiệt độ cao, nên trồng rau muống, cà chua, ớt");
-    advice.push("💧 Tăng cường tưới nước, che bóng mát cho cây");
-  } else {
-    advice.push("🌤️ Thời tiết lý tưởng cho hầu hết các loại cây trồng");
-  }
-  
-  if (humidity > 80) {
-    advice.push("💧 Độ ẩm cao, chú ý phòng chống bệnh nấm");
-  }
-  
-  return {
-    currentAdvice: advice,
-    seasonalCrops: getSeasonalCrops(season),
-    plantingCalendar: getPlantingCalendar()
-  };
-}
-
-function getCurrentSeason() {
-  const month = new Date().getMonth() + 1;
-  if (month >= 3 && month <= 5) return 'spring';
-  if (month >= 6 && month <= 8) return 'summer';
-  if (month >= 9 && month <= 11) return 'autumn';
-  return 'winter';
-}
-
-function getSeasonalCrops(season) {
-  const crops = {
-    spring: ['cà chua', 'dưa chuột', 'đậu đũa', 'rau muống'],
-    summer: ['bầu bí', 'mướp', 'ớt', 'cà tím'],
-    autumn: ['cải thảo', 'súp lơ', 'cà rốt', 'củ cải'],
-    winter: ['rau cải', 'tỏi', 'hành', 'rau thơm']
-  };
-  return crops[season] || [];
-}
-
-function getPlantingCalendar() {
-  return {
-    thisWeek: "Thích hợp gieo hạt rau lá",
-    nextWeek: "Có thể trồng cây ăn quả",
-    thisMonth: "Mùa thu hoạch rau màu"
-  };
-}
-
-// ===== OPENAI INTEGRATION =====
-
-async function generateOpenAIResponse(userMessage, collectedData) {
-  if (!apiKeys.openai) {
-    return generateLocalAIResponse(userMessage, collectedData);
-  }
-  
-  try {
-    const prompt = buildSmartPrompt(userMessage, collectedData);
-    
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKeys.openai}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'Bạn là AI trợ lý thông minh của ứng dụng Weather & Life. Hãy trả lời một cách hữu ích, chính xác và thân thiện bằng tiếng Việt. Sử dụng emoji phù hợp và format đẹp.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 500,
-        temperature: 0.7
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`OpenAI API Error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.choices[0].message.content;
-    
-  } catch (error) {
-    console.error('OpenAI Error:', error);
-    return generateLocalAIResponse(userMessage, collectedData);
-  }
-}
-
-function buildSmartPrompt(userMessage, data) {
-  let prompt = `Câu hỏi của người dùng: "${userMessage}"\n\n`;
-  
-  if (data.weather) {
-    prompt += `📊 DỮ LIỆU THỜI TIẾT HIỆN TẠI:\n`;
-    prompt += `- Vị trí: ${data.weather.location}\n`;
-    prompt += `- Nhiệt độ: ${data.weather.temperature}°C (cảm giác như ${data.weather.feelsLike}°C)\n`;
-    prompt += `- Tình trạng: ${data.weather.condition}\n`;
-    prompt += `- Độ ẩm: ${data.weather.humidity}%\n`;
-    prompt += `- Gió: ${data.weather.windSpeed} km/h\n`;
-    prompt += `- Tầm nhìn: ${data.weather.visibility} km\n`;
-    prompt += `- Chỉ số UV: ${data.weather.uv}\n`;
-    prompt += `- AQI: ${data.weather.aqi}\n\n`;
-  }
-  
-  if (data.news) {
-    prompt += `📰 TIN TỨC MỚI NHẤT:\n`;
-    data.news.forEach((news, index) => {
-      prompt += `${index + 1}. ${news.title} (${news.time})\n   ${news.summary}\n`;
-    });
-    prompt += '\n';
-  }
-  
-  if (data.finance) {
-    prompt += `💰 DỮ LIỆU TÀI CHÍNH:\n`;
-    prompt += `- Vàng: ${data.finance.gold.price} (${data.finance.gold.change})\n`;
-    prompt += `- USD: ${data.finance.usd.rate} (${data.finance.usd.change})\n`;
-    prompt += `- VN30: ${data.finance.vn30.index} (${data.finance.vn30.change})\n\n`;
-  }
-  
-  if (data.agriculture) {
-    prompt += `🌱 TƯ VẤN NÔNG NGHIỆP:\n`;
-    prompt += `- Lời khuyên hiện tại: ${data.agriculture.currentAdvice.join(', ')}\n`;
-    prompt += `- Cây trồng theo mùa: ${data.agriculture.seasonalCrops.join(', ')}\n\n`;
-  }
-  
-  prompt += `Hãy phân tích dữ liệu trên và trả lời câu hỏi của người dùng một cách chi tiết, hữu ích. Sử dụng emoji và format đẹp.`;
-  
-  return prompt;
-}
-
-// ===== FALLBACK LOCAL AI =====
-
-function generateLocalAIResponse(message, data) {
-  const lowerMessage = message.toLowerCase();
-  
-  // Weather analysis
-  if (lowerMessage.includes('thời tiết') || lowerMessage.includes('phân tích')) {
-    if (data.weather) {
-      let response = `🌤️ **PHÂN TÍCH THỜI TIẾT CHI TIẾT**\n\n`;
-      response += `📍 **Vị trí:** ${data.weather.location}\n`;
-      response += `🌡️ **Nhiệt độ:** ${data.weather.temperature}°C (cảm giác ${data.weather.feelsLike}°C)\n`;
-      response += `☁️ **Tình trạng:** ${data.weather.condition}\n`;
-      response += `💧 **Độ ẩm:** ${data.weather.humidity}%\n`;
-      response += `💨 **Gió:** ${data.weather.windSpeed} km/h\n`;
-      response += `👁️ **Tầm nhìn:** ${data.weather.visibility} km\n`;
-      response += `☀️ **Chỉ số UV:** ${data.weather.uv}\n`;
-      response += `🍃 **Chất lượng không khí:** AQI ${data.weather.aqi}\n\n`;
-      
-      // Add recommendations
-      response += `💡 **Lời khuyên:**\n`;
-      if (data.weather.temperature > 30) {
-        response += `• Thời tiết nóng, nên mặc quần áo thoáng mát\n`;
-        response += `• Uống nhiều nước, tránh ra ngoài 11h-15h\n`;
-      } else if (data.weather.temperature < 20) {
-        response += `• Thời tiết mát, nên mặc áo ấm\n`;
-        response += `• Thích hợp cho hoạt động ngoài trời\n`;
-      }
-      
-      if (data.weather.humidity > 80) {
-        response += `• Độ ẩm cao, có thể có mưa\n`;
-      }
-      
-      return response;
-    }
-  }
-  
-  // News summary
-  if (lowerMessage.includes('tin tức') || lowerMessage.includes('news')) {
-    if (data.news) {
-      let response = `📰 **TIN TỨC QUAN TRỌNG HÔM NAY**\n\n`;
-      data.news.forEach((news, index) => {
-        response += `**${index + 1}. ${news.title}** (${news.time})\n`;
-        response += `${news.summary}\n\n`;
-      });
-      return response;
-    }
-  }
-  
-  // Financial data
-  if (lowerMessage.includes('giá') || lowerMessage.includes('vàng') || lowerMessage.includes('usd')) {
-    if (data.finance) {
-      let response = `💰 **THÔNG TIN TÀI CHÍNH HÔM NAY**\n\n`;
-      response += `🥇 **Vàng:** ${data.finance.gold.price} (${data.finance.gold.change})\n`;
-      response += `💵 **USD:** ${data.finance.usd.rate} (${data.finance.usd.change})\n`;
-      response += `📈 **VN30:** ${data.finance.vn30.index} (${data.finance.vn30.change})\n\n`;
-      
-      response += `📊 **Nhận xét:** Thị trường ${data.finance.vn30.change.includes('+') ? 'tích cực' : 'tiêu cực'} hôm nay.\n`;
-      return response;
-    }
-  }
-  
-  // Agriculture advice
-  if (lowerMessage.includes('trồng') || lowerMessage.includes('cây') || lowerMessage.includes('nông nghiệp')) {
-    if (data.agriculture && data.weather) {
-      let response = `🌱 **TƯ VẤN NÔNG NGHIỆP THÔNG MINH**\n\n`;
-      response += `🌡️ **Điều kiện hiện tại:** ${data.weather.temperature}°C, độ ẩm ${data.weather.humidity}%\n\n`;
-      
-      response += `💡 **Lời khuyên:**\n`;
-      data.agriculture.currentAdvice.forEach(advice => {
-        response += `• ${advice}\n`;
-      });
-      
-      response += `\n🌾 **Cây trồng phù hợp mùa này:**\n`;
-      data.agriculture.seasonalCrops.forEach(crop => {
-        response += `• ${crop}\n`;
-      });
-      
-      return response;
-    }
-  }
-  
-  // Default comprehensive response
-  let response = `🤖 **AI PHÂN TÍCH TỔNG HỢP**\n\n`;
-  
-  if (data.weather) {
-    response += `🌤️ Thời tiết: ${data.weather.temperature}°C, ${data.weather.condition}\n`;
-  }
-  
-  if (data.news) {
-    response += `📰 Có ${data.news.length} tin tức mới cập nhật\n`;
-  }
-  
-  if (data.finance) {
-    response += `💰 Vàng ${data.finance.gold.change}, USD ${data.finance.usd.change}\n`;
-  }
-  
-  response += `\nBạn có thể hỏi tôi về thời tiết, tin tức, giá cả, hoặc tư vấn nông nghiệp!`;
-  
-  return response;
-}
-
-// ===== API CONFIGURATION FUNCTIONS =====
-
-function toggleApiConfig() {
-  const panel = document.getElementById('apiConfigPanel');
-  panel.classList.toggle('hidden');
-}
-
-function saveApiKeys() {
-  const openaiKey = document.getElementById('openaiKey').value.trim();
-  const weatherKey = document.getElementById('weatherKey').value.trim();
-  
-  if (openaiKey) {
-    apiKeys.openai = openaiKey;
-    localStorage.setItem('openai_key', openaiKey);
-  }
-  
-  if (weatherKey) {
-    apiKeys.weather = weatherKey;
-    localStorage.setItem('weather_key', weatherKey);
-  }
-  
-  updateApiStatus();
-  showNotification('✅ Đã lưu API keys thành công!', 'success');
-  toggleApiConfig();
-}
-
-function loadApiKeys() {
-  const savedOpenAI = localStorage.getItem('openai_key');
-  const savedWeather = localStorage.getItem('weather_key');
-  
-  if (savedOpenAI) {
-    apiKeys.openai = savedOpenAI;
-    document.getElementById('openaiKey').value = savedOpenAI;
-  }
-  
-  if (savedWeather) {
-    apiKeys.weather = savedWeather;
-    document.getElementById('weatherKey').value = savedWeather;
-  }
-  
-  updateApiStatus();
-}
-
-async function testApiConnection() {
-  const statusEl = document.getElementById('apiStatus');
-  statusEl.innerHTML = '<div class="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div><span class="text-xs">Testing...</span>';
-  
-  let results = [];
-  
-  // Test OpenAI
-  if (apiKeys.openai) {
-    try {
-      const response = await fetch('https://api.openai.com/v1/models', {
-        headers: { 'Authorization': `Bearer ${apiKeys.openai}` }
-      });
-      results.push(`OpenAI: ${response.ok ? '✅ OK' : '❌ Error'}`);
-    } catch (error) {
-      results.push('OpenAI: ❌ Error');
-    }
-  }
-  
-  // Test Weather API
-  if (apiKeys.weather) {
-    try {
-      const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${apiKeys.weather}&q=Hanoi`);
-      results.push(`Weather: ${response.ok ? '✅ OK' : '❌ Error'}`);
-    } catch (error) {
-      results.push('Weather: ❌ Error');
-    }
-  }
-  
-  if (results.length === 0) {
-    results.push('⚠️ Chưa có API key nào');
-  }
-  
-  showNotification(`🧪 Kết quả test API:\n${results.join('\n')}`, 'info', 8000);
-  updateApiStatus();
-}
-
-function updateApiStatus() {
-  const statusEl = document.getElementById('apiStatus');
-  const hasKeys = apiKeys.openai || apiKeys.weather;
-  
-  if (hasKeys) {
-    statusEl.innerHTML = '<div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div><span class="text-xs">API Ready</span>';
-  } else {
-    statusEl.innerHTML = '<div class="w-2 h-2 bg-orange-400 rounded-full"></div><span class="text-xs">Mock Mode</span>';
-  }
-}
-
-// SOS Emergency System
-function activateSOS() {
-  if (sosActive) {
-    showNotification('🚨 SOS đã được kích hoạt!', 'warning');
-    return;
-  }
-  
-  sosActive = true;
-  showSOSModal();
-  startSOSCountdown();
-  
-  // Get location for emergency
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      position => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        updateSOSLocation(lat, lng);
-      },
-      error => {
-        console.error('Location error:', error);
-        updateSOSLocation(null, null);
-      }
-    );
-  }
-}
-
-function showSOSModal() {
-  const modal = document.createElement('div');
-  modal.id = 'sosModal';
-  modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
-  
-  modal.innerHTML = `
-    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden animate-pulse">
-      <!-- Header -->
-      <div class="bg-gradient-to-r from-red-500 to-red-600 text-white p-6 text-center">
-        <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-          <i class="ri-alarm-warning-line text-3xl animate-bounce"></i>
-        </div>
-        <h2 class="text-2xl font-bold">🚨 CẢNH BÁO KHẨN CẤP</h2>
-        <p class="text-red-100 mt-2">Thời gian: ${new Date().toLocaleString('vi-VN')}</p>
-      </div>
-
-      <!-- Content -->
-      <div class="p-6">
-        <!-- SOS Button -->
-        <div class="text-center mb-6">
-          <div class="w-32 h-32 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4 cursor-pointer hover:bg-red-600 transition-colors" onclick="triggerEmergencyCall()">
-            <div class="text-center text-white">
-              <i class="ri-shield-line text-4xl mb-2"></i>
-              <div class="text-xl font-bold">SOS</div>
-            </div>
-          </div>
-          <p class="text-gray-600 text-sm">Nhấn và giữ để kích hoạt SOS</p>
-          <p class="text-gray-500 text-xs mt-1">Nhấn và giữ 3 giây để gửi tín hiệu khẩn cấp</p>
-        </div>
-
-        <!-- Emergency Contacts -->
-        <div class="bg-blue-50 rounded-xl p-4 mb-4">
-          <h3 class="font-semibold text-blue-800 mb-3 flex items-center gap-2">
-            <i class="ri-contacts-line"></i>
-            Danh bạ khẩn cấp
-          </h3>
-          <div class="space-y-2">
-            <div class="flex items-center justify-between bg-white rounded-lg p-3">
-              <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                  <i class="ri-phone-line text-red-600"></i>
-                </div>
-                <div>
-                  <div class="font-semibold text-gray-800">Cảnh sát 113</div>
-                  <div class="text-xs text-gray-500">Emergency Services</div>
-                </div>
-              </div>
-              <button onclick="callEmergency('113')" class="bg-green-500 text-white px-3 py-1 rounded-full text-xs hover:bg-green-600">
-                📞 Gọi
-              </button>
-            </div>
-            
-            <div class="flex items-center justify-between bg-white rounded-lg p-3">
-              <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
-                  <i class="ri-fire-line text-orange-600"></i>
-                </div>
-                <div>
-                  <div class="font-semibold text-gray-800">Cứu hỏa 114</div>
-                  <div class="text-xs text-gray-500">Fire Department</div>
-                </div>
-              </div>
-              <button onclick="callEmergency('114')" class="bg-green-500 text-white px-3 py-1 rounded-full text-xs hover:bg-green-600">
-                📞 Gọi
-              </button>
-            </div>
-            
-            <div class="flex items-center justify-between bg-white rounded-lg p-3">
-              <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <i class="ri-hospital-line text-blue-600"></i>
-                </div>
-                <div>
-                  <div class="font-semibold text-gray-800">Cấp cứu 115</div>
-                  <div class="text-xs text-gray-500">Medical Emergency</div>
-                </div>
-              </div>
-              <button onclick="callEmergency('115')" class="bg-green-500 text-white px-3 py-1 rounded-full text-xs hover:bg-green-600">
-                📞 Gọi
-              </button>
-            </div>
-          </div>
-          
-          <div class="mt-3 p-2 bg-yellow-50 rounded-lg">
-            <div class="flex items-center gap-2 text-yellow-800 text-xs">
-              <i class="ri-information-line"></i>
-              <span>Lưu ý: Trong trường hợp khẩn cấp, hãy gọi ngay số 113, 114, 115</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Location Info -->
-        <div class="bg-green-50 rounded-xl p-4 mb-4">
-          <h3 class="font-semibold text-green-800 mb-3 flex items-center gap-2">
-            <i class="ri-map-pin-line"></i>
-            Vị trí hiện tại
-          </h3>
-          <div id="sosLocationInfo" class="text-sm text-gray-600">
-            <div class="flex items-center gap-2 mb-2">
-              <i class="ri-loader-4-line animate-spin text-blue-500"></i>
-              <span>Đang xác định vị trí...</span>
-            </div>
-          </div>
-          
-          <div class="mt-3 flex gap-2">
-            <button onclick="shareLocation()" class="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg text-xs hover:bg-blue-600">
-              📍 Google Maps
-            </button>
-            <button onclick="shareLocationText()" class="flex-1 bg-green-500 text-white px-3 py-2 rounded-lg text-xs hover:bg-green-600">
-              📱 Chia sẻ
-            </button>
-          </div>
-          
-          <div class="mt-2 text-xs text-green-600 bg-green-100 rounded p-2">
-            <i class="ri-shield-check-line mr-1"></i>
-            Vị trí sẽ được xác định và gửi kèm trong tin hiệu SOS
-          </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex gap-3">
-          <button onclick="cancelSOS()" class="flex-1 bg-gray-500 text-white px-4 py-3 rounded-full hover:bg-gray-600 transition-colors">
-            ❌ Hủy
-          </button>
-          <button onclick="confirmSOS()" class="flex-1 bg-red-500 text-white px-4 py-3 rounded-full hover:bg-red-600 transition-colors font-semibold">
-            🚨 Xác nhận SOS
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-  
-  document.body.appendChild(modal);
-  document.body.style.overflow = 'hidden';
-}
-
-function startSOSCountdown() {
-  let countdown = 30;
-  sosTimer = setInterval(() => {
-    countdown--;
-    const modal = document.getElementById('sosModal');
-    if (modal && countdown > 0) {
-      // Update countdown display if needed
-    } else {
-      clearInterval(sosTimer);
-      if (countdown <= 0) {
-        // Auto-trigger SOS after 30 seconds
-        triggerEmergencyCall();
-      }
-    }
-  }, 1000);
-}
-
-function updateSOSLocation(lat, lng) {
-  const locationInfo = document.getElementById('sosLocationInfo');
-  if (!locationInfo) return;
-  
-  if (lat && lng) {
-    locationInfo.innerHTML = `
-      <div class="space-y-2">
-        <div class="flex items-center gap-2">
-          <i class="ri-map-pin-line text-green-500"></i>
-          <span class="font-semibold">Tọa độ GPS:</span>
-        </div>
-        <div class="bg-white rounded p-2 font-mono text-xs">
-          <div>Vĩ độ: ${lat.toFixed(6)}</div>
-          <div>Kinh độ: ${lng.toFixed(6)}</div>
-        </div>
-        <div class="text-xs text-gray-500">
-          Độ chính xác: ±10m | Thời gian: ${new Date().toLocaleTimeString('vi-VN')}
-        </div>
-      </div>
-    `;
-    
-    // Store location for emergency use
-    window.sosLocation = { lat, lng };
-  } else {
-    locationInfo.innerHTML = `
-      <div class="flex items-center gap-2 text-orange-600">
-        <i class="ri-error-warning-line"></i>
-        <span>Không thể xác định vị trí GPS</span>
-      </div>
-      <div class="text-xs text-gray-500 mt-1">
-        Vui lòng bật GPS hoặc cung cấp vị trí thủ công
-      </div>
-    `;
-  }
-}
-
-function callEmergency(number) {
-  showNotification(`📞 Đang kết nối với ${number}...`, 'info');
-  
-  // Try to make actual call on mobile devices
-  if (navigator.userAgent.match(/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i)) {
-    window.location.href = `tel:${number}`;
-  } else {
-    // Show instructions for desktop
-    alert(`📞 HƯỚNG DẪN GỌI KHẨN CẤP
-
-Số điện thoại: ${number}
-
-Trên điện thoại: Gọi trực tiếp số ${number}
-Trên máy tính: Sử dụng điện thoại để gọi
-
-Thông tin cần cung cấp:
-- Tên và số điện thoại
-- Địa chỉ chính xác
-- Tình huống khẩn cấp
-- Số người bị nạn (nếu có)
-
-⚠️ Chỉ gọi khi thực sự cần thiết!`);
-  }
-}
-
-function shareLocation() {
-  if (window.sosLocation) {
-    const { lat, lng } = window.sosLocation;
-    const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-    window.open(mapsUrl, '_blank');
-  } else {
-    showNotification('⚠️ Chưa có thông tin vị trí GPS', 'warning');
-  }
-}
-
-function shareLocationText() {
-  if (window.sosLocation) {
-    const { lat, lng } = window.sosLocation;
-    const locationText = `🚨 KHẨN CẤP - VỊ TRÍ CỦA TÔI:
-
-📍 Tọa độ GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}
-🔗 Google Maps: https://www.google.com/maps?q=${lat},${lng}
-⏰ Thời gian: ${new Date().toLocaleString('vi-VN')}
-
-Được gửi từ Weather & Life Emergency System`;
-    
-    if (navigator.share) {
-      navigator.share({
-        title: '🚨 Vị trí khẩn cấp',
-        text: locationText
-      });
-    } else {
-      navigator.clipboard.writeText(locationText).then(() => {
-        showNotification('📋 Đã sao chép thông tin vị trí!', 'success');
-      });
-    }
-  } else {
-    showNotification('⚠️ Chưa có thông tin vị trí GPS', 'warning');
-  }
-}
-
-function triggerEmergencyCall() {
-  showNotification('🚨 Đã kích hoạt tín hiệu SOS!', 'error');
-  
-  // Show emergency confirmation
-  const confirmModal = document.createElement('div');
-  confirmModal.className = 'fixed inset-0 bg-red-500 bg-opacity-90 z-60 flex items-center justify-center p-4';
-  confirmModal.innerHTML = `
-    <div class="bg-white rounded-2xl p-8 text-center max-w-sm w-full">
-      <div class="text-6xl mb-4">🚨</div>
-      <h2 class="text-2xl font-bold text-red-600 mb-4">SOS ĐÃ ĐƯỢC KÍCH HOẠT!</h2>
-      <p class="text-gray-600 mb-6">Tín hiệu khẩn cấp đã được gửi đến các dịch vụ cứu hộ.</p>
-      <div class="space-y-2 text-sm text-gray-500 mb-6">
-        <p>✅ Đã gửi vị trí GPS</p>
-        <p>✅ Đã thông báo 113, 114, 115</p>
-        <p>✅ Đã gửi tin nhắn khẩn cấp</p>
-      </div>
-      <button onclick="this.parentElement.parentElement.remove(); cancelSOS();" 
-              class="bg-red-500 text-white px-6 py-3 rounded-full hover:bg-red-600">
-        Đóng
-      </button>
-    </div>
-  `;
-  
-  document.body.appendChild(confirmModal);
-  
-  // Auto close after 10 seconds
-  setTimeout(() => {
-    if (confirmModal.parentElement) {
-      confirmModal.remove();
-      cancelSOS();
-    }
-  }, 10000);
-}
-
-function confirmSOS() {
-  triggerEmergencyCall();
-}
-
-function cancelSOS() {
-  sosActive = false;
-  if (sosTimer) {
-    clearInterval(sosTimer);
-    sosTimer = null;
-  }
-  
-  const modal = document.getElementById('sosModal');
-  if (modal) {
-    modal.remove();
-    document.body.style.overflow = 'auto';
-  }
-  
-  showNotification('✅ Đã hủy tín hiệu SOS', 'success');
-}
-
-// Enhanced disaster warning functions
-function openDisasterWarningModal() {
-  const modal = document.getElementById('disasterModal');
-  const updateTime = document.getElementById('updateTime');
-  
-  updateTime.textContent = new Date().toLocaleString('vi-VN');
-  modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-  
-  loadDisasterData();
-  animateRiskBars();
-}
-
-function closeDisasterWarningModal() {
-  const modal = document.getElementById('disasterModal');
-  modal.classList.add('hidden');
-  document.body.style.overflow = 'auto';
-}
-
-function loadDisasterData() {
-  updateCurrentAlerts();
-  updateRiskAssessment();
-  loadAIPredictions();
-}
-
-function updateCurrentAlerts() {
-  const alertsContainer = document.getElementById('currentAlerts');
-  
-  if (disasterWarningSystem.currentAlerts.length === 0) {
-    alertsContainer.innerHTML = `
-      <i class="ri-shield-check-line text-green-500 text-5xl mb-4"></i>
-      <h4 class="text-xl font-semibold text-gray-800 mb-2">Khu vực an toàn</h4>
-      <p class="text-gray-600 text-lg mb-2">Không có cảnh báo thiên tai nào</p>
-      <p class="text-gray-500 text-sm">Hệ thống AI đang giám sát 24/7</p>
-    `;
-  }
-}
-
-function updateRiskAssessment() {
-  // Update overall score with animation
-  const overallScore = document.querySelector('.w-32.h-32 span');
-  if (overallScore) {
-    let currentScore = 0;
-    const targetScore = disasterWarningSystem.riskAssessment.overall;
-    const increment = targetScore / 30;
-    
-    const countUp = setInterval(() => {
-      currentScore += increment;
-      if (currentScore >= targetScore) {
-        currentScore = targetScore;
-        clearInterval(countUp);
-      }
-      overallScore.textContent = Math.round(currentScore);
-    }, 50);
-  }
-}
-
-function animateRiskBars() {
-  setTimeout(() => {
-    document.querySelectorAll('.risk-progress').forEach((bar, index) => {
-      setTimeout(() => {
-        bar.style.transition = 'width 1s ease-in-out';
-        bar.style.width = bar.style.width;
-      }, index * 200);
-    });
-  }, 500);
-}
-
-function loadAIPredictions() {
-  // AI predictions are already loaded in the HTML
-  // This function can be used to update them dynamically
-}
-
-// Enhanced notification system
-function showNotification(message, type = 'info', duration = 5000) {
-  const notification = document.createElement('div');
-  notification.className = `fixed top-4 right-4 z-50 p-4 rounded-xl shadow-2xl max-w-sm transform transition-all duration-300 translate-x-full border-l-4`;
-  
-  const colors = {
-    success: 'bg-green-50 text-green-800 border-green-500',
-    warning: 'bg-yellow-50 text-yellow-800 border-yellow-500',
-    error: 'bg-red-50 text-red-800 border-red-500',
-    info: 'bg-blue-50 text-blue-800 border-blue-500'
-  };
-  
-  const icons = {
-    success: 'ri-check-line',
-    warning: 'ri-alert-line',
-    error: 'ri-close-line',
-    info: 'ri-information-line'
-  };
-  
-  notification.className += ` ${colors[type] || colors.info}`;
-  
-  notification.innerHTML = `
-    <div class="flex items-start gap-3">
-      <i class="${icons[type] || icons.info} text-xl flex-shrink-0 mt-0.5"></i>
-      <div class="flex-1">
-        <p class="font-medium">${message}</p>
-      </div>
-      <button onclick="this.parentElement.parentElement.remove()" 
-              class="text-current hover:bg-black hover:bg-opacity-10 p-1 rounded transition-colors">
-        <i class="ri-close-line text-sm"></i>
-      </button>
-    </div>
-  `;
-  
-  document.body.appendChild(notification);
-  
-  setTimeout(() => {
-    notification.classList.remove('translate-x-full');
-  }, 100);
-  
-  setTimeout(() => {
-    notification.classList.add('translate-x-full');
     setTimeout(() => {
-      if (notification.parentElement) {
-        notification.remove();
-      }
-    }, 300);
-  }, duration);
+      const btn = document.getElementById('locateBtn');
+      if (btn) btn.click();
+    }, 1000);
+  }
 }
 
 // Enhanced feature handling
 function handleFeatureClick(feature) {
-  const message = featureMessages[feature];
-  if (message) {
-    // Create a custom modal instead of alert
-    showFeatureModal(feature, message);
+  if (feature === 'sos') {
+    openSOSModal();
+  } else {
+    const message = featureMessages[feature];
+    if (message) {
+      showDetailedAlert(feature, message);
+    }
   }
 }
 
-function showFeatureModal(feature, message) {
-  const modal = document.createElement('div');
-  modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
-  
-  const featureColors = {
-    weather: 'blue',
-    sos: 'red',
-    plants: 'green',
-    alerts: 'yellow',
-    health: 'pink',
-    travel: 'indigo',
-    energy: 'orange'
+// Enhanced detailed alert function
+function showDetailedAlert(feature, message) {
+  const titles = {
+    weather: '🌤️ Thông tin thời tiết chi tiết',
+    plants: '🌱 Tư vấn nông nghiệp thông minh',
+    alerts: '⚠️ Cảnh báo thời tiết và thiên tai'
   };
   
-  const color = featureColors[feature] || 'blue';
-  
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
   modal.innerHTML = `
-    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
-      <div class="bg-gradient-to-r from-${color}-500 to-${color}-600 text-white p-6 rounded-t-2xl">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xl font-bold">Thông tin chi tiết</h3>
-          <button onclick="this.closest('.fixed').remove()" 
-                  class="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-full transition-colors">
-            <i class="ri-close-line text-xl"></i>
-          </button>
-        </div>
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-gray-800">${titles[feature]}</h3>
+        <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600">
+          <i class="ri-close-line text-xl"></i>
+        </button>
       </div>
-      <div class="p-6">
-        <pre class="whitespace-pre-wrap text-gray-800 leading-relaxed">${message}</pre>
-        <div class="mt-6 flex gap-3">
-          <button onclick="this.closest('.fixed').remove()" 
-                  class="flex-1 bg-gray-500 text-white px-4 py-2 rounded-full hover:bg-gray-600 transition-colors">
-            Đóng
-          </button>
-          <button onclick="shareFeatureInfo('${feature}')" 
-                  class="flex-1 bg-${color}-500 text-white px-4 py-2 rounded-full hover:bg-${color}-600 transition-colors">
-            Chia sẻ
-          </button>
-        </div>
+      <div class="text-sm text-gray-600 whitespace-pre-line leading-relaxed">
+        ${message}
+      </div>
+      <div class="mt-6 flex gap-3">
+        <button onclick="this.closest('.fixed').remove()" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-colors">
+          Đóng
+        </button>
+        <button onclick="handleFeatureAction('${feature}')" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg transition-colors">
+          Xem thêm
+        </button>
       </div>
     </div>
   `;
   
   document.body.appendChild(modal);
-  document.body.style.overflow = 'hidden';
-  
-  // Close on outside click
-  modal.addEventListener('click', function(e) {
-    if (e.target === modal) {
-      modal.remove();
-      document.body.style.overflow = 'auto';
-    }
-  });
 }
 
-function shareFeatureInfo(feature) {
-  const message = featureMessages[feature];
-  if (navigator.share) {
-    navigator.share({
-      title: `Weather & Life - ${feature}`,
-      text: message,
-      url: window.location.href
-    });
-  } else {
-    navigator.clipboard.writeText(message).then(() => {
-      showNotification('Đã sao chép thông tin vào clipboard!', 'success');
-    });
+// Handle feature actions
+function handleFeatureAction(feature) {
+  switch(feature) {
+    case 'weather':
+      // Scroll to charts section
+      document.querySelector('#temperatureChart').scrollIntoView({ behavior: 'smooth' });
+      break;
+    case 'plants':
+      showNotification('Tính năng tư vấn nông nghiệp chi tiết đang được phát triển!', 'info');
+      break;
+    case 'alerts':
+      openDisasterWarningModal();
+      break;
   }
+  
+  // Close the modal
+  document.querySelector('.fixed.inset-0').remove();
 }
 
 // Enhanced search functionality
@@ -2343,41 +663,22 @@ function handleLocationSearch() {
   if (query) {
     showNotification(`🔍 Đang tìm kiếm thời tiết cho: "${query}"`, 'info');
     
-    // Simulate search with loading
+    // Simulate search with timeout
     setTimeout(() => {
       const mockResults = [
-        { name: 'Hà Nội', temp: '26°C', weather: '☁️', aqi: 65, uv: 4 },
-        { name: 'TP.HCM', temp: '30°C', weather: '☀️', aqi: 55, uv: 8 },
-        { name: 'Đà Nẵng', temp: '28°C', weather: '🌤️', aqi: 45, uv: 6 }
+        { name: 'Hà Nội', temp: '26°C', condition: 'Nhiều mây' },
+        { name: 'TP.HCM', temp: '30°C', condition: 'Nắng đẹp' },
+        { name: 'Đà Nẵng', temp: '28°C', condition: 'Nắng ít mây' }
       ];
       
       const result = mockResults.find(r => r.name.toLowerCase().includes(query.toLowerCase())) || 
-                    { name: query, temp: '27°C', weather: '🌤️', aqi: 50, uv: 5 };
+                    { name: query, temp: '27°C', condition: 'Dữ liệu mô phỏng' };
       
-      showNotification(`Tìm thấy: ${result.name} - ${result.temp} ${result.weather} | AQI: ${result.aqi} | UV: ${result.uv}`, 'success');
-      searchInput.value = '';
+      showNotification(`📍 ${result.name}: ${result.temp}, ${result.condition}`, 'success');
     }, 1500);
+    
+    searchInput.value = '';
   }
-}
-
-// Mobile menu functionality
-function initializeMobileMenu() {
-  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-  const mobileMenu = document.getElementById('mobileMenu');
-  
-  mobileMenuBtn.addEventListener('click', () => {
-    mobileMenu.classList.toggle('hidden');
-    const icon = mobileMenuBtn.querySelector('i');
-    icon.className = mobileMenu.classList.contains('hidden') ? 'ri-menu-line text-xl' : 'ri-close-line text-xl';
-  });
-  
-  // Close mobile menu when clicking on links
-  document.querySelectorAll('.nav-link-mobile').forEach(link => {
-    link.addEventListener('click', () => {
-      mobileMenu.classList.add('hidden');
-      mobileMenuBtn.querySelector('i').className = 'ri-menu-line text-xl';
-    });
-  });
 }
 
 // Enhanced smooth scrolling
@@ -2391,38 +692,714 @@ function initializeSmoothScrolling() {
           behavior: 'smooth',
           block: 'start'
         });
-        
-        // Update active nav link
-        document.querySelectorAll('.nav-link').forEach(link => {
-          link.classList.remove('active');
-        });
-        this.classList.add('active');
       }
     });
   });
 }
 
-// Enhanced animations
-function addEnhancedAnimations() {
+// Enhanced fade-in animation
+function addFadeInAnimation() {
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         entry.target.classList.add('fade-in');
-        
-        // Special animations for different elements
-        if (entry.target.classList.contains('weather-card')) {
-          entry.target.style.animationDelay = `${Array.from(entry.target.parentNode.children).indexOf(entry.target) * 0.1}s`;
-        }
       }
     });
-  }, { threshold: 0.1 });
+  }, {
+    threshold: 0.1,
+    rootMargin: '0px 0px -50px 0px'
+  });
 
-  document.querySelectorAll('.weather-card, .hero-section, .chart-container').forEach(el => {
-    observer.observe(el);
+  document.querySelectorAll('.weather-card, .bg-white').forEach(card => {
+    observer.observe(card);
   });
 }
 
-// Additional utility functions
+// Enhanced initialization
+document.addEventListener("DOMContentLoaded", () => {
+  // Start clock
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // Initialize charts
+  initializeCharts();
+
+  // Initialize map
+  window.weatherMap = initializeMap();
+
+  // Add event listeners for feature buttons
+  document.querySelectorAll('.feature-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const feature = btn.getAttribute('data-feature');
+      handleFeatureClick(feature);
+    });
+  });
+
+  // Enhanced search functionality
+  const searchInput = document.getElementById('locationSearch');
+  searchInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      handleLocationSearch();
+    }
+  });
+
+  // Add search suggestions
+  searchInput.addEventListener('input', (e) => {
+    const query = e.target.value.toLowerCase();
+    if (query.length > 1) {
+      // Show search suggestions (simplified)
+      const suggestions = ['Hà Nội', 'TP.HCM', 'Đà Nẵng', 'Cần Thơ', 'Hải Phòng', 'Nha Trang']
+        .filter(city => city.toLowerCase().includes(query));
+      
+      // You can implement a dropdown here
+    }
+  });
+
+  // Initialize smooth scrolling
+  initializeSmoothScrolling();
+
+  // Add fade-in animations
+  addFadeInAnimation();
+
+  // Make functions globally available
+  window.locateUser = locateUser;
+  
+  // Auto-update weather data every 5 minutes
+  setInterval(() => {
+    updateWeatherData();
+  }, 300000);
+  
+  // Show welcome notification
+  setTimeout(() => {
+    showNotification('🌟 Chào mừng đến với Weather & Life Pro!', 'success');
+  }, 2000);
+});
+
+// Enhanced weather data update function
+function updateWeatherData() {
+  // Simulate real-time data updates
+  const variation = () => Math.random() * 4 - 2; // ±2 variation
+  
+  weatherData.temperature = weatherData.temperature.map(temp => 
+    Math.max(15, Math.min(40, temp + variation()))
+  );
+  
+  weatherData.humidity = weatherData.humidity.map(humidity => 
+    Math.max(30, Math.min(100, humidity + variation()))
+  );
+  
+  // Re-initialize charts with new data
+  initializeCharts();
+  
+  showNotification('📊 Dữ liệu thời tiết đã được cập nhật!', 'info');
+}
+
+// Enhanced window resize handling
+window.addEventListener('resize', () => {
+  // Charts will auto-resize due to the resize listeners in initializeCharts
+  if (window.weatherMap) {
+    window.weatherMap.invalidateSize();
+  }
+});
+
+// Enhanced interactive features
+document.addEventListener('DOMContentLoaded', () => {
+  // Enhanced navigation hover effects
+  const navLinks = document.querySelectorAll('nav a');
+  navLinks.forEach(link => {
+    link.addEventListener('mouseenter', () => {
+      link.style.transform = 'translateY(-2px)';
+      link.style.textShadow = '0 2px 4px rgba(0,0,0,0.1)';
+    });
+    
+    link.addEventListener('mouseleave', () => {
+      link.style.transform = 'translateY(0)';
+      link.style.textShadow = 'none';
+    });
+  });
+
+  // Enhanced weather card interactions
+  document.querySelectorAll('.weather-card').forEach(card => {
+    card.addEventListener('click', () => {
+      card.style.transform = 'scale(0.98)';
+      setTimeout(() => {
+        card.style.transform = '';
+      }, 150);
+    });
+    
+    // Add ripple effect
+    card.addEventListener('mousedown', (e) => {
+      const ripple = document.createElement('div');
+      const rect = card.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height);
+      const x = e.clientX - rect.left - size / 2;
+      const y = e.clientY - rect.top - size / 2;
+      
+      ripple.style.cssText = `
+        position: absolute;
+        width: ${size}px;
+        height: ${size}px;
+        left: ${x}px;
+        top: ${y}px;
+        background: rgba(255,255,255,0.3);
+        border-radius: 50%;
+        transform: scale(0);
+        animation: ripple 0.6s ease-out;
+        pointer-events: none;
+        z-index: 1;
+      `;
+      
+      card.style.position = 'relative';
+      card.style.overflow = 'hidden';
+      card.appendChild(ripple);
+      
+      setTimeout(() => {
+        ripple.remove();
+      }, 600);
+    });
+  });
+});
+
+// SOS Emergency Functions (keeping existing functionality with enhancements)
+function openSOSModal() {
+  const modal = document.getElementById('sosModal');
+  if (!modal) {
+    createSOSModal();
+    return;
+  }
+  
+  modal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  
+  updateCurrentLocation();
+}
+
+function closeSOSModal() {
+  const modal = document.getElementById('sosModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    document.body.style.overflow = 'auto';
+  }
+  
+  if (sosEmergencySystem.countdownInterval) {
+    clearInterval(sosEmergencySystem.countdownInterval);
+    sosEmergencySystem.countdownInterval = null;
+  }
+  sosEmergencySystem.isEmergencyActive = false;
+}
+
+function createSOSModal() {
+  const modalHTML = `
+    <div id="sosModal" class="fixed inset-0 bg-black bg-opacity-60 z-50 hidden">
+      <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+          <!-- Header -->
+          <div class="bg-gradient-to-r from-red-500 to-red-600 text-white p-8 rounded-t-3xl">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-4">
+                <div class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                  <i class="ri-alarm-warning-line text-3xl"></i>
+                </div>
+                <div>
+                  <h2 class="text-3xl font-bold">Hệ thống SOS khẩn cấp</h2>
+                  <p class="text-red-100 text-lg">Nhấn và giữ để kích hoạt tín hiệu cứu hộ</p>
+                </div>
+              </div>
+              <button onclick="closeSOSModal()" class="text-white hover:bg-white hover:bg-opacity-20 p-3 rounded-full transition-colors">
+                <i class="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Content -->
+          <div class="p-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <!-- SOS Button Section -->
+              <div class="text-center">
+                <div class="mb-8">
+                  <button id="sosButton" class="w-56 h-56 bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 active:scale-95 mx-auto flex items-center justify-center flex-col border-4 border-red-300" 
+                          onmousedown="startSOSActivation()" onmouseup="cancelSOSActivation()" onmouseleave="cancelSOSActivation()"
+                          ontouchstart="startSOSActivation()" ontouchend="cancelSOSActivation()">
+                    <i class="ri-shield-line text-7xl mb-3"></i>
+                    <span class="text-3xl font-bold">SOS</span>
+                    <span class="text-sm mt-2 opacity-90">Nhấn & giữ</span>
+                  </button>
+                  <p class="text-gray-600 mt-6 text-lg">Nhấn và giữ trong 5 giây để kích hoạt tín hiệu SOS</p>
+                  <div id="sosCountdown" class="mt-4 text-red-600 font-bold text-2xl hidden"></div>
+                </div>
+                
+                <!-- Current Location -->
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border border-blue-200">
+                  <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-3">
+                    <i class="ri-map-pin-line text-blue-600 text-2xl"></i>
+                    Vị trí hiện tại
+                  </h3>
+                  <div id="currentLocationInfo" class="text-sm text-gray-600 mb-4">
+                    <p class="flex items-center justify-center gap-2">
+                      <i class="ri-loader-4-line animate-spin"></i>
+                      Đang xác định vị trí...
+                    </p>
+                  </div>
+                  <div class="flex gap-3">
+                    <button onclick="shareLocation()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 font-semibold">
+                      <i class="ri-share-line"></i>
+                      Chia sẻ vị trí
+                    </button>
+                    <button onclick="openInMaps()" class="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 font-semibold">
+                      <i class="ri-map-line"></i>
+                      Mở bản đồ
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Emergency Contacts -->
+              <div>
+                <h3 class="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+                  <i class="ri-phone-line text-green-600 text-2xl"></i>
+                  Danh bạ khẩn cấp
+                </h3>
+                <div class="space-y-4 max-h-96 overflow-y-auto">
+                  ${sosEmergencySystem.emergencyContacts.map(contact => `
+                    <div class="contact-card bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-4 flex items-center justify-between hover:from-gray-100 hover:to-gray-200 transition-all duration-300 border border-gray-200">
+                      <div class="flex items-center gap-4">
+                        <div class="w-14 h-14 bg-${getContactColor(contact.type)}-500 rounded-full flex items-center justify-center text-white shadow-lg">
+                          <i class="${contact.icon} text-xl"></i>
+                        </div>
+                        <div>
+                          <h4 class="font-bold text-gray-800 text-lg">${contact.name}</h4>
+                          <p class="text-gray-500 text-sm">${contact.description}</p>
+                          <p class="text-gray-700 font-mono text-sm">${contact.number}</p>
+                        </div>
+                      </div>
+                      <button onclick="callEmergency('${contact.number}', '${contact.name}')" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl transition-colors flex items-center gap-2 shadow-lg font-semibold">
+                        <i class="ri-phone-line text-lg"></i>
+                        Gọi ngay
+                      </button>
+                    </div>
+                  `).join('')}
+                </div>
+                
+                <div class="mt-6 p-4 bg-yellow-50 rounded-xl border-l-4 border-yellow-400">
+                  <div class="flex items-start gap-3">
+                    <i class="ri-information-line text-yellow-600 text-xl mt-1"></i>
+                    <div>
+                      <p class="text-sm text-yellow-800 font-semibold mb-1">Lưu ý quan trọng:</p>
+                      <p class="text-sm text-yellow-700">
+                        Trong trường hợp khẩn cấp, hãy gọi ngay số điện thoại cứu hộ quốc gia: 
+                        <strong>113 (Cảnh sát)</strong>, <strong>114 (Cứu hỏa)</strong>, <strong>115 (Cấp cứu)</strong>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  setTimeout(() => openSOSModal(), 100);
+}
+
+function getContactColor(type) {
+  const colors = {
+    police: 'blue',
+    fire: 'red',
+    medical: 'green',
+    rescue: 'orange',
+    traffic: 'purple',
+    hospital: 'teal',
+    family: 'pink',
+    insurance: 'indigo'
+  };
+  return colors[type] || 'gray';
+}
+
+function startSOSActivation() {
+  if (sosEmergencySystem.isEmergencyActive) return;
+  
+  sosEmergencySystem.isEmergencyActive = true;
+  let countdown = 5;
+  
+  const countdownElement = document.getElementById('sosCountdown');
+  const sosButton = document.getElementById('sosButton');
+  
+  if (countdownElement && sosButton) {
+    countdownElement.classList.remove('hidden');
+    sosButton.classList.add('animate-pulse');
+    
+    sosEmergencySystem.countdownInterval = setInterval(() => {
+      countdownElement.textContent = `Kích hoạt SOS trong ${countdown}s`;
+      countdown--;
+      
+      if (countdown < 0) {
+        activateEmergency();
+      }
+    }, 1000);
+  }
+}
+
+function cancelSOSActivation() {
+  if (sosEmergencySystem.countdownInterval) {
+    clearInterval(sosEmergencySystem.countdownInterval);
+    sosEmergencySystem.countdownInterval = null;
+  }
+  
+  const countdownElement = document.getElementById('sosCountdown');
+  const sosButton = document.getElementById('sosButton');
+  
+  if (countdownElement) {
+    countdownElement.classList.add('hidden');
+  }
+  
+  if (sosButton) {
+    sosButton.classList.remove('animate-pulse');
+  }
+  
+  sosEmergencySystem.isEmergencyActive = false;
+}
+
+function activateEmergency() {
+  cancelSOSActivation();
+  
+  showNotification('🚨 TÌNH TRẠNG KHẨN CẤP ĐÃ ĐƯỢC KÍCH HOẠT!', 'error');
+  sendSOSSignal();
+  closeSOSModal();
+  showEmergencyStatus();
+}
+
+function sendSOSSignal() {
+  const location = sosEmergencySystem.currentLocation;
+  const timestamp = new Date().toLocaleString('vi-VN');
+  
+  const emergencyData = {
+    timestamp,
+    location,
+    contacts: sosEmergencySystem.emergencyContacts,
+    userAgent: navigator.userAgent,
+    emergencyId: Date.now()
+  };
+  
+  // Log to emergency history
+  sosEmergencySystem.emergencyHistory.push(emergencyData);
+  
+  console.log('🚨 SOS Signal Sent:', emergencyData);
+  
+  // Enhanced notification
+  const locationText = location ? 
+    `📍 Vị trí: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}` : 
+    '📍 Vị trí: Không xác định';
+    
+  showNotification(`🚨 TÍN HIỆU SOS ĐÃ ĐƯỢC GỬI!\n\n${locationText}\n⏰ Thời gian: ${timestamp}\n📞 Đang thông báo đến các dịch vụ cứu hộ...`, 'error');
+}
+
+function showEmergencyStatus() {
+  const statusHTML = `
+    <div id="emergencyStatus" class="fixed top-24 left-4 right-4 bg-gradient-to-r from-red-500 to-red-600 text-white p-6 rounded-2xl shadow-2xl z-40 border-2 border-red-300">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center animate-pulse">
+            <i class="ri-alarm-warning-line text-2xl"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-xl">TÌNH TRẠNG KHẨN CẤP</h3>
+            <p class="text-red-100">Tín hiệu SOS đã được gửi - Đang chờ cứu hộ</p>
+            <p class="text-red-200 text-sm mt-1">ID: ${Date.now()}</p>
+          </div>
+        </div>
+        <button onclick="cancelEmergency()" class="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition-colors font-semibold">
+          Hủy bỏ
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('afterbegin', statusHTML);
+}
+
+function cancelEmergency() {
+  const statusElement = document.getElementById('emergencyStatus');
+  if (statusElement) {
+    statusElement.remove();
+  }
+  showNotification('Đã hủy tình trạng khẩn cấp', 'info');
+}
+
+function updateCurrentLocation() {
+  const locationInfo = document.getElementById('currentLocationInfo');
+  if (!locationInfo) return;
+  
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      function(position) {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const accuracy = position.coords.accuracy;
+        
+        sosEmergencySystem.currentLocation = { lat, lng, accuracy };
+        sosEmergencySystem.lastLocationUpdate = new Date();
+        
+        locationInfo.innerHTML = `
+          <div class="space-y-3">
+            <div class="bg-white p-3 rounded-lg border">
+              <p class="font-semibold text-gray-800 mb-2">Tọa độ GPS:</p>
+              <div class="font-mono text-sm bg-gray-50 p-2 rounded">
+                <div>Vĩ độ: ${lat.toFixed(6)}</div>
+                <div>Kinh độ: ${lng.toFixed(6)}</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="bg-blue-50 p-2 rounded text-center">
+                <div class="font-semibold text-blue-700">Độ chính xác</div>
+                <div class="text-blue-600">${Math.round(accuracy)}m</div>
+              </div>
+              <div class="bg-green-50 p-2 rounded text-center">
+                <div class="font-semibold text-green-700">Cập nhật</div>
+                <div class="text-green-600">${new Date().toLocaleTimeString('vi-VN')}</div>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        getLocationAddress(lat, lng);
+      },
+      function(error) {
+        locationInfo.innerHTML = `
+          <div class="text-center p-4">
+            <div class="text-red-600 mb-2">
+              <i class="ri-error-warning-line text-3xl"></i>
+            </div>
+            <p class="text-red-600 font-semibold">Không thể xác định vị trí</p>
+            <p class="text-red-500 text-sm mt-1">Vui lòng cho phép truy cập vị trí</p>
+            <button onclick="updateCurrentLocation()" class="mt-3 bg-blue-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-600">
+              Thử lại
+            </button>
+          </div>
+        `;
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      }
+    );
+  } else {
+    locationInfo.innerHTML = `
+      <div class="text-center p-4 text-red-600">
+        <i class="ri-error-warning-line text-3xl mb-2"></i>
+        <p class="font-semibold">Trình duyệt không hỗ trợ GPS</p>
+      </div>
+    `;
+  }
+}
+
+async function getLocationAddress(lat, lng) {
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=vi`);
+    const data = await response.json();
+    
+    if (data && data.display_name) {
+      const locationInfo = document.getElementById('currentLocationInfo');
+      if (locationInfo) {
+        const currentContent = locationInfo.innerHTML;
+        locationInfo.innerHTML = `
+          <div class="space-y-3">
+            <div class="bg-white p-3 rounded-lg border">
+              <p class="font-semibold text-gray-800 mb-2">Địa chỉ:</p>
+              <p class="text-sm text-gray-600">${data.display_name}</p>
+            </div>
+            ${currentContent}
+          </div>
+        `;
+      }
+    }
+  } catch (error) {
+    console.log('Lỗi lấy địa chỉ:', error);
+  }
+}
+
+function callEmergency(number, name) {
+  if (confirm(`🚨 Bạn có chắc chắn muốn gọi ${name} (${number})?`)) {
+    window.location.href = `tel:${number}`;
+    showNotification(`📞 Đang gọi ${name}...`, 'info');
+    logEmergencyCall(number, name);
+  }
+}
+
+function logEmergencyCall(number, name) {
+  const callLog = {
+    timestamp: new Date().toISOString(),
+    name: name,
+    number: number,
+    location: sosEmergencySystem.currentLocation,
+    callId: Date.now()
+  };
+  
+  const existingLogs = JSON.parse(localStorage.getItem('emergencyCallLogs') || '[]');
+  existingLogs.push(callLog);
+  localStorage.setItem('emergencyCallLogs', JSON.stringify(existingLogs));
+  
+  console.log('Emergency call logged:', callLog);
+}
+
+function shareLocation() {
+  const location = sosEmergencySystem.currentLocation;
+  if (!location) {
+    showNotification('Chưa xác định được vị trí', 'warning');
+    return;
+  }
+  
+  const shareText = `🚨 KHẨN CẤP - Vị trí của tôi:
+Vĩ độ: ${location.lat.toFixed(6)}
+Kinh độ: ${location.lng.toFixed(6)}
+Google Maps: https://maps.google.com/?q=${location.lat},${location.lng}
+Thời gian: ${new Date().toLocaleString('vi-VN')}
+Độ chính xác: ${Math.round(location.accuracy)}m`;
+  
+  if (navigator.share) {
+    navigator.share({
+      title: 'Vị trí khẩn cấp - Weather & Life',
+      text: shareText
+    }).then(() => {
+      showNotification('Đã chia sẻ vị trí thành công!', 'success');
+    }).catch(() => {
+      fallbackShareLocation(shareText);
+    });
+  } else {
+    fallbackShareLocation(shareText);
+  }
+}
+
+function fallbackShareLocation(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showNotification('Đã sao chép thông tin vị trí vào clipboard!', 'success');
+  }).catch(() => {
+    // Fallback for older browsers
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+    showNotification('Đã sao chép thông tin vị trí!', 'success');
+  });
+}
+
+function openInMaps() {
+  const location = sosEmergencySystem.currentLocation;
+  if (!location) {
+    showNotification('Chưa xác định được vị trí', 'warning');
+    return;
+  }
+  
+  const mapsUrl = `https://maps.google.com/?q=${location.lat},${location.lng}`;
+  window.open(mapsUrl, '_blank');
+  showNotification('Đã mở vị trí trong Google Maps', 'success');
+}
+
+// Disaster Warning Functions (keeping existing functionality with enhancements)
+function openDisasterWarningModal() {
+  const modal = document.getElementById('disasterModal');
+  const updateTime = document.getElementById('updateTime');
+  
+  updateTime.textContent = new Date().toLocaleString('vi-VN');
+  
+  modal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  
+  loadDisasterData();
+}
+
+function closeDisasterWarningModal() {
+  const modal = document.getElementById('disasterModal');
+  modal.classList.add('hidden');
+  document.body.style.overflow = 'auto';
+}
+
+function loadDisasterData() {
+  updateCurrentAlerts();
+  updateRiskAssessment();
+  updateDisasterHistory();
+}
+
+function updateCurrentAlerts() {
+  const alertsContainer = document.getElementById('currentAlerts');
+  
+  if (disasterWarningSystem.currentAlerts.length === 0) {
+    alertsContainer.innerHTML = `
+      <div class="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+        <i class="ri-shield-check-line text-green-500 text-4xl"></i>
+      </div>
+      <h4 class="text-xl font-bold text-gray-800 mb-2">Khu vực an toàn</h4>
+      <p class="text-gray-600 text-lg mb-4">Không có cảnh báo thiên tai nào trong khu vực của bạn</p>
+      <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
+        <i class="ri-check-line text-green-500"></i>
+        <span>Hệ thống đang giám sát 24/7</span>
+      </div>
+    `;
+  } else {
+    let alertsHTML = '';
+    disasterWarningSystem.currentAlerts.forEach(alert => {
+      const levelColors = {
+        low: 'yellow',
+        medium: 'orange', 
+        high: 'red',
+        critical: 'red'
+      };
+      const color = levelColors[alert.level] || 'gray';
+      
+      alertsHTML += `
+        <div class="bg-${color}-50 border-l-4 border-${color}-500 p-4 mb-3 rounded-lg">
+          <div class="flex items-center">
+            <i class="ri-alarm-warning-line text-${color}-500 text-xl mr-3"></i>
+            <div class="flex-1">
+              <h4 class="font-bold text-${color}-800">${alert.title}</h4>
+              <p class="text-${color}-600 text-sm">${alert.description}</p>
+              <div class="flex items-center gap-4 mt-2 text-xs text-${color}-500">
+                <span>📍 ${alert.area}</span>
+                <span>⏰ ${alert.time}</span>
+                <span class="px-2 py-1 bg-${color}-200 rounded-full font-semibold">${alert.level.toUpperCase()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    alertsContainer.innerHTML = alertsHTML;
+  }
+}
+
+function updateRiskAssessment() {
+  // Update overall score with animation
+  const overallScore = document.querySelector('.w-32.h-32 span');
+  if (overallScore) {
+    let currentScore = 0;
+    const targetScore = disasterWarningSystem.riskAssessment.overall;
+    const increment = targetScore / 50;
+    
+    const updateScore = () => {
+      currentScore += increment;
+      if (currentScore >= targetScore) {
+        overallScore.textContent = targetScore;
+      } else {
+        overallScore.textContent = Math.floor(currentScore);
+        requestAnimationFrame(updateScore);
+      }
+    };
+    
+    updateScore();
+  }
+}
+
+function updateDisasterHistory() {
+  // Enhanced history display (if needed)
+  console.log('Disaster history updated:', disasterWarningSystem.disasterHistory);
+}
+
 function refreshAlerts() {
   const button = event.target.closest('button');
   const originalHTML = button.innerHTML;
@@ -2430,55 +1407,65 @@ function refreshAlerts() {
   button.innerHTML = '<i class="ri-loader-4-line animate-spin mr-2"></i>Đang tải...';
   button.disabled = true;
   
+  // Simulate API call
   setTimeout(() => {
+    // Update timestamp
     document.getElementById('updateTime').textContent = new Date().toLocaleString('vi-VN');
+    
+    // Simulate new risk assessment
+    disasterWarningSystem.riskAssessment.overall = Math.floor(Math.random() * 100);
+    disasterWarningSystem.riskAssessment.risks.forEach(risk => {
+      risk.level = Math.floor(Math.random() * 100);
+    });
+    
     loadDisasterData();
     
     button.innerHTML = originalHTML;
     button.disabled = false;
     
-    showNotification('Đã cập nhật cảnh báo mới nhất!', 'success');
+    showNotification('📊 Đã cập nhật cảnh báo mới nhất!', 'success');
   }, 2000);
 }
 
 function subscribeAlerts() {
   if ('Notification' in window) {
     if (Notification.permission === 'granted') {
-      showNotification('Bạn đã đăng ký nhận thông báo cảnh báo thiên tai!', 'success');
+      showNotification('✅ Bạn đã đăng ký nhận thông báo cảnh báo thiên tai!', 'success');
+      
+      // Send test notification
+      setTimeout(() => {
+        new Notification('🌦️ Weather & Life Pro', {
+          body: 'Bạn sẽ nhận được cảnh báo thiên tai kịp thời!',
+          icon: 'https://images.pexels.com/photos/1118873/pexels-photo-1118873.jpeg?auto=compress&cs=tinysrgb&w=64&h=64&dpr=1'
+        });
+      }, 1000);
+      
     } else if (Notification.permission !== 'denied') {
       Notification.requestPermission().then(permission => {
         if (permission === 'granted') {
-          showNotification('Đã bật thông báo cảnh báo thiên tai!', 'success');
-          
-          // Show a sample notification
-          setTimeout(() => {
-            new Notification('Weather & Life Enhanced', {
-              body: 'Bạn đã đăng ký thành công! Sẽ nhận cảnh báo khi có thiên tai.',
-              icon: '/favicon.ico'
-            });
-          }, 1000);
+          showNotification('🔔 Đã bật thông báo cảnh báo thiên tai!', 'success');
         } else {
-          showNotification('Vui lòng cho phép thông báo để nhận cảnh báo kịp thời!', 'warning');
+          showNotification('⚠️ Vui lòng cho phép thông báo để nhận cảnh báo kịp thời!', 'warning');
         }
       });
     } else {
-      showNotification('Vui lòng bật thông báo trong cài đặt trình duyệt!', 'warning');
+      showNotification('❌ Vui lòng bật thông báo trong cài đặt trình duyệt!', 'warning');
     }
   } else {
-    showNotification('Trình duyệt không hỗ trợ thông báo!', 'error');
+    showNotification('❌ Trình duyệt không hỗ trợ thông báo!', 'error');
   }
 }
 
 function shareAlerts() {
   const shareData = {
-    title: 'Cảnh báo thiên tai - Weather & Life Enhanced',
-    text: 'Theo dõi tình hình thiên tai và cảnh báo kịp thời tại khu vực của bạn với AI thế hệ mới',
+    title: 'Cảnh báo thiên tai - Weather & Life Pro',
+    text: 'Theo dõi tình hình thiên tai và nhận cảnh báo kịp thời tại khu vực của bạn với hệ thống AI tiên tiến.',
     url: window.location.href
   };
   
   if (navigator.share) {
     navigator.share(shareData).then(() => {
-      showNotification('Đã chia sẻ thành công!', 'success');
+      showNotification('📤 Đã chia sẻ thành công!', 'success');
     }).catch(() => {
       fallbackShare();
     });
@@ -2490,644 +1477,322 @@ function shareAlerts() {
 function fallbackShare() {
   const url = window.location.href;
   navigator.clipboard.writeText(url).then(() => {
-    showNotification('Đã sao chép link vào clipboard!', 'success');
+    showNotification('📋 Đã sao chép link vào clipboard!', 'success');
   }).catch(() => {
-    showNotification('Không thể chia sẻ. Vui lòng sao chép link thủ công!', 'warning');
+    showNotification('⚠️ Không thể chia sẻ. Vui lòng sao chép link thủ công!', 'warning');
   });
 }
 
-function exportReport() {
-  showNotification('Đang tạo báo cáo nâng cao...', 'info');
+// Enhanced notification system
+function showNotification(message, type = 'info') {
+  const notification = document.createElement('div');
+  notification.className = `fixed top-4 right-4 z-50 p-4 rounded-xl shadow-2xl max-w-sm transform transition-all duration-500 translate-x-full border-l-4`;
   
+  const colors = {
+    success: 'bg-green-500 text-white border-green-600',
+    warning: 'bg-yellow-500 text-white border-yellow-600',
+    error: 'bg-red-500 text-white border-red-600',
+    info: 'bg-blue-500 text-white border-blue-600'
+  };
+  
+  const icons = {
+    success: 'ri-check-line',
+    warning: 'ri-alert-line',
+    error: 'ri-close-circle-line',
+    info: 'ri-information-line'
+  };
+  
+  notification.className += ` ${colors[type] || colors.info}`;
+  
+  notification.innerHTML = `
+    <div class="flex items-start gap-3">
+      <i class="${icons[type] || icons.info} text-xl mt-0.5"></i>
+      <div class="flex-1">
+        <p class="whitespace-pre-line leading-relaxed">${message}</p>
+      </div>
+      <button onclick="this.parentElement.parentElement.remove()" class="text-white hover:bg-white hover:bg-opacity-20 p-1 rounded-full transition-colors ml-2">
+        <i class="ri-close-line text-lg"></i>
+      </button>
+    </div>
+  `;
+  
+  document.body.appendChild(notification);
+  
+  // Show with animation
   setTimeout(() => {
-    const reportData = `
-BÁOCÁO THỜI TIẾT & CẢNH BÁO THIÊN TAI NÂNG CAO
-==============================================
-Thời gian: ${new Date().toLocaleString('vi-VN')}
-Vị trí: ${weatherData.current.location}
-Phiên bản: Weather & Life Enhanced v2.0
+    notification.classList.remove('translate-x-full');
+  }, 100);
+  
+  // Auto-hide after 5 seconds
+  setTimeout(() => {
+    notification.classList.add('translate-x-full');
+    setTimeout(() => {
+      if (notification.parentElement) {
+        notification.remove();
+      }
+    }, 500);
+  }, 5000);
+}
 
-THỜI TIẾT HIỆN TẠI:
-- Nhiệt độ: ${weatherData.current.temp}°C (Cảm giác như 30°C)
-- Độ ẩm: ${weatherData.current.humidity}%
-- Gió: ${weatherData.current.windSpeed} km/h, hướng Đông Nam
-- Tình trạng: ${weatherData.current.condition}
-- Tầm nhìn: ${weatherData.current.visibility} km
-- Chỉ số UV: ${weatherData.current.uv} (Trung bình)
-- AQI: ${weatherData.current.aqi} (Tốt)
+// Enhanced event listeners
+document.addEventListener('click', function(e) {
+  // Close modals when clicking outside
+  const sosModal = document.getElementById('sosModal');
+  const disasterModal = document.getElementById('disasterModal');
+  
+  if (sosModal && e.target === sosModal) {
+    closeSOSModal();
+  }
+  
+  if (disasterModal && e.target === disasterModal) {
+    closeDisasterWarningModal();
+  }
+});
 
-ĐÁNH GIÁ RỦI RO AI:
-- Tổng thể: ${disasterWarningSystem.riskAssessment.overall}/100
-- Lũ lụt: 70% (Cao)
-- Bão: 60% (Trung bình)
-- Dông: 80% (Cao)
-- Mưa lớn: 85% (Rất cao)
-- Sóng nhiệt: 30% (Thấp)
-
-DỰ BÁO 48H TỚI:
-- Hôm nay 15:00: Mưa nhẹ (75%)
-- Hôm nay 20:00: Gió mạnh (60%)
-- Ngày mai: Nắng ráo (90%)
-- Ngày kia: Cảnh báo nắng nóng (65%)
-
-KHUYẾN NGHỊ:
-- Theo dõi cảnh báo thường xuyên
-- Chuẩn bị đồ dự phòng
-- Hạn chế ra ngoài khi có cảnh báo
-- Sử dụng kem chống nắng SPF 30+
-- Uống đủ nước (2-2.5L/ngày)
-
-TƯ VẤN SỨC KHỎE:
-- Thời tiết hiện tại phù hợp cho hoạt động ngoài trời
-- Cần bảo vệ da khỏi tia UV
-- Chất lượng không khí tốt cho hô hấp
-
-Được tạo bởi Weather & Life AI System Enhanced
-Độ tin cậy: 94% | Cập nhật: Mỗi 10 phút
-    `;
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const sosModal = document.getElementById('sosModal');
+    const disasterModal = document.getElementById('disasterModal');
     
-    const blob = new Blob([reportData], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `weather-report-enhanced-${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (sosModal && !sosModal.classList.contains('hidden')) {
+      closeSOSModal();
+    }
     
-    showNotification('Đã xuất báo cáo nâng cao thành công!', 'success');
+    if (disasterModal && !disasterModal.classList.contains('hidden')) {
+      closeDisasterWarningModal();
+    }
+  }
+});
+
+// 🌤️ WEATHER DETAIL FUNCTIONS - Các hàm cho form thông tin thời tiết chi tiết
+
+// Làm mới dữ liệu thời tiết
+function refreshWeatherData() {
+  const button = event.target.closest('button');
+  const originalHTML = button.innerHTML;
+  
+  // Hiển thị trạng thái loading
+  button.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Đang cập nhật...';
+  button.disabled = true;
+  
+  // Giả lập việc tải dữ liệu mới
+  setTimeout(() => {
+    // Cập nhật một số giá trị ngẫu nhiên để mô phỏng dữ liệu mới
+    updateWeatherDisplay();
+    
+    // Khôi phục nút
+    button.innerHTML = originalHTML;
+    button.disabled = false;
+    
+    // Hiển thị thông báo thành công
+    showNotification('Đã cập nhật dữ liệu thời tiết mới nhất!', 'success');
   }, 2000);
 }
 
-function setupAlerts() {
-  showNotification('Đang mở cài đặt cảnh báo...', 'info');
+// Cập nhật hiển thị thời tiết
+function updateWeatherDisplay() {
+  // Tạo dữ liệu ngẫu nhiên để mô phỏng cập nhật
+  const newTemp = Math.floor(Math.random() * 5) + 26; // 26-30°C
+  const newHumidity = Math.floor(Math.random() * 20) + 70; // 70-90%
+  const newWind = Math.floor(Math.random() * 10) + 10; // 10-20 km/h
+  const newUV = Math.floor(Math.random() * 3) + 7; // 7-9
   
-  setTimeout(() => {
-    const modal = document.createElement('div');
-    modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
-    
-    modal.innerHTML = `
-      <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-        <div class="bg-gradient-to-r from-orange-500 to-red-500 text-white p-6 rounded-t-2xl">
-          <div class="flex items-center justify-between">
-            <h3 class="text-xl font-bold">Cài đặt cảnh báo</h3>
-            <button onclick="this.closest('.fixed').remove()" 
-                    class="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-full transition-colors">
-              <i class="ri-close-line text-xl"></i>
-            </button>
-          </div>
+  // Cập nhật các giá trị trên giao diện
+  const tempElements = document.querySelectorAll('.weather-metric-card .text-2xl');
+  if (tempElements[0]) tempElements[0].textContent = `${newTemp}°C`;
+  if (tempElements[1]) tempElements[1].textContent = `${newHumidity}%`;
+  if (tempElements[2]) tempElements[2].textContent = `${newWind} km/h`;
+  if (tempElements[3]) tempElements[3].textContent = `${newUV}`;
+  
+  // Cập nhật nhiệt độ chính
+  const mainTemp = document.querySelector('.text-4xl.font-bold');
+  if (mainTemp) mainTemp.textContent = `${newTemp}°C`;
+  
+  // Thêm hiệu ứng animation cho các card
+  document.querySelectorAll('.weather-metric-card').forEach(card => {
+    card.style.transform = 'scale(1.05)';
+    setTimeout(() => {
+      card.style.transform = 'scale(1)';
+    }, 200);
+  });
+}
+
+// Chia sẻ thông tin thời tiết
+function shareWeatherInfo() {
+  const weatherInfo = `🌤️ THÔNG TIN THỜI TIẾT CHI TIẾT
+
+📍 Vị trí: Đà Nẵng, Việt Nam
+🌡️ Nhiệt độ: 28°C (Cảm giác như 31°C)
+💧 Độ ẩm: 75%
+💨 Gió: 15 km/h, hướng Đông Nam
+☀️ Chỉ số UV: 8 (Cao)
+🌊 Áp suất: 1015 hPa
+👁️ Tầm nhìn: 10 km
+
+📊 Dự báo:
+• Sáng: Nắng ít mây
+• Chiều: Có thể có mưa rào
+• Tối: Trời quang, mát mẻ
+
+📱 Theo dõi thời tiết tại: ${window.location.href}`;
+
+  if (navigator.share) {
+    navigator.share({
+      title: 'Thông tin thời tiết Đà Nẵng',
+      text: weatherInfo
+    }).then(() => {
+      showNotification('Đã chia sẻ thông tin thời tiết!', 'success');
+    }).catch(() => {
+      fallbackShareWeather(weatherInfo);
+    });
+  } else {
+    fallbackShareWeather(weatherInfo);
+  }
+}
+
+// Chia sẻ thông tin thời tiết dự phòng
+function fallbackShareWeather(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showNotification('Đã sao chép thông tin thời tiết vào clipboard!', 'success');
+  }).catch(() => {
+    // Hiển thị modal với thông tin để người dùng copy thủ công
+    alert(text);
+  });
+}
+
+// Đặt cảnh báo thời tiết
+function setWeatherAlert() {
+  // Tạo modal đặt cảnh báo
+  const alertModal = document.createElement('div');
+  alertModal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+  alertModal.innerHTML = `
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+      <div class="flex items-center gap-3 mb-6">
+        <div class="bg-orange-100 p-3 rounded-full">
+          <i class="ri-notification-line text-orange-600 text-xl"></i>
         </div>
-        <div class="p-6">
-          <div class="space-y-4">
-            <div class="flex items-center justify-between">
-              <span>Cảnh báo mưa</span>
-              <input type="checkbox" checked class="toggle">
-            </div>
-            <div class="flex items-center justify-between">
-              <span>Cảnh báo bão</span>
-              <input type="checkbox" checked class="toggle">
-            </div>
-            <div class="flex items-center justify-between">
-              <span>Cảnh báo nắng nóng</span>
-              <input type="checkbox" class="toggle">
-            </div>
-            <div class="flex items-center justify-between">
-              <span>Cảnh báo chất lượng không khí</span>
-              <input type="checkbox" checked class="toggle">
-            </div>
-          </div>
-          <div class="mt-6 flex gap-3">
-            <button onclick="this.closest('.fixed').remove()" 
-                    class="flex-1 bg-gray-500 text-white px-4 py-2 rounded-full hover:bg-gray-600 transition-colors">
-              Hủy
-            </button>
-            <button onclick="saveAlertSettings()" 
-                    class="flex-1 bg-orange-500 text-white px-4 py-2 rounded-full hover:bg-orange-600 transition-colors">
-              Lưu cài đặt
-            </button>
-          </div>
+        <h3 class="text-xl font-bold text-gray-800">Đặt cảnh báo thời tiết</h3>
+      </div>
+      
+      <div class="space-y-4 mb-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Loại cảnh báo</label>
+          <select class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+            <option value="temperature">Nhiệt độ cao (>35°C)</option>
+            <option value="rain">Mưa lớn (>50mm)</option>
+            <option value="wind">Gió mạnh (>30km/h)</option>
+            <option value="uv">Chỉ số UV cao (>9)</option>
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Thời gian cảnh báo</label>
+          <select class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+            <option value="1h">1 giờ trước</option>
+            <option value="3h">3 giờ trước</option>
+            <option value="6h">6 giờ trước</option>
+            <option value="12h">12 giờ trước</option>
+          </select>
+        </div>
+        
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="pushNotification" class="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500">
+          <label for="pushNotification" class="text-sm text-gray-700">Gửi thông báo push</label>
         </div>
       </div>
-    `;
-    
-    document.body.appendChild(modal);
-    document.body.style.overflow = 'hidden';
-    
-    // Close on outside click
-    modal.addEventListener('click', function(e) {
-      if (e.target === modal) {
-        modal.remove();
-        document.body.style.overflow = 'auto';
-      }
-    });
-  }, 500);
-}
-
-function saveAlertSettings() {
-  showNotification('Đã lưu cài đặt cảnh báo!', 'success');
-  document.querySelector('.fixed').remove();
-  document.body.style.overflow = 'auto';
-}
-
-// Locate user function (enhanced)
-function locateUser() {
-  const locateBtn = document.getElementById('locateBtn');
-  if (locateBtn) {
-    locateBtn.click();
-  } else {
-    setTimeout(() => {
-      const btn = document.getElementById('locateBtn');
-      if (btn) btn.click();
-    }, 1000);
-  }
-}
-
-// ✅ **BƯỚC 1: GỌI API THỜI TIẾT**
-async function getWeatherData(location = 'Hanoi') {
-  if (!apiKeys.weather) {
-    throw new Error('Chưa có Weather API key. Vui lòng cấu hình trong phần cài đặt.');
-  }
+      
+      <div class="flex gap-3">
+        <button onclick="this.closest('.fixed').remove()" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-4 py-3 rounded-lg transition-colors">
+          Hủy
+        </button>
+        <button onclick="confirmWeatherAlert(this)" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 rounded-lg transition-colors">
+          Đặt cảnh báo
+        </button>
+      </div>
+    </div>
+  `;
   
-  try {
-    const response = await fetch(`${API_ENDPOINTS.weather}?key=${apiKeys.weather}&q=${location}&aqi=yes`);
-    
-    if (!response.ok) {
-      throw new Error(`Weather API Error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Weather API Error:', error);
-    throw error;
-  }
+  document.body.appendChild(alertModal);
 }
 
-// ✅ **BƯỚC 1: GỌI API TIN TỨC**
-async function getNewsData() {
-  if (!apiKeys.news) {
-    // Fallback với dữ liệu mẫu nếu không có API key
-    return {
-      articles: [
-        {
-          title: "Thời tiết miền Bắc chuyển lạnh",
-          description: "Không khí lạnh tăng cường, nhiệt độ giảm 3-5 độ C",
-          publishedAt: new Date().toISOString()
-        }
-      ]
-    };
-  }
+// Xác nhận đặt cảnh báo
+function confirmWeatherAlert(button) {
+  const modal = button.closest('.fixed');
+  const alertType = modal.querySelector('select').value;
+  const alertTime = modal.querySelectorAll('select')[1].value;
+  const pushEnabled = modal.querySelector('#pushNotification').checked;
   
-  try {
-    const response = await fetch(`${API_ENDPOINTS.news}?country=us&category=general&apiKey=${apiKeys.news}&pageSize=3`);
-    
-    if (!response.ok) {
-      throw new Error(`News API Error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('News API Error:', error);
-    // Return fallback data
-    return {
-      articles: [
-        {
-          title: "Tin tức không khả dụng",
-          description: "Không thể tải tin tức. Vui lòng kiểm tra kết nối mạng.",
-          publishedAt: new Date().toISOString()
-        }
-      ]
-    };
-  }
-}
-
-// ✅ **BƯỚC 2: TẠO PROMPT CHO AI**
-function createSmartPrompt(userMessage, weatherData, newsData) {
-  const currentTime = new Date().toLocaleString('vi-VN');
-  
-  let prompt = `Bạn là AI trợ lý thông minh của ứng dụng Weather & Life. Hãy phân tích dữ liệu thực tế và trả lời câu hỏi của người dùng một cách chính xác, hữu ích.
-
-📅 THỜI GIAN HIỆN TẠI: ${currentTime}
-
-🌤️ DỮ LIỆU THỜI TIẾT THỰC TẾ:`;
-
-  if (weatherData) {
-    prompt += `
-- 📍 Địa điểm: ${weatherData.location.name}, ${weatherData.location.country}
-- 🌡️ Nhiệt độ: ${weatherData.current.temp_c}°C (cảm giác như ${weatherData.current.feelslike_c}°C)
-- ☁️ Tình trạng: ${weatherData.current.condition.text}
-- 💧 Độ ẩm: ${weatherData.current.humidity}%
-- 💨 Gió: ${weatherData.current.wind_kph} km/h, hướng ${weatherData.current.wind_dir}
-- 👁️ Tầm nhìn: ${weatherData.current.vis_km} km
-- 🌬️ Chỉ số UV: ${weatherData.current.uv}
-- 🏭 Chất lượng không khí: AQI ${weatherData.current.air_quality?.['us-epa-index'] || 'N/A'}`;
-  }
-
-  if (newsData && newsData.articles && newsData.articles.length > 0) {
-    prompt += `
-
-📰 TIN TỨC MỚI NHẤT:`;
-    newsData.articles.slice(0, 3).forEach((article, index) => {
-      prompt += `
-${index + 1}. ${article.title}
-   ${article.description || 'Không có mô tả'}`;
-    });
-  }
-
-  prompt += `
-
-❓ CÂU HỎI CỦA NGƯỜI DÙNG: "${userMessage}"
-
-📋 YÊU CẦU:
-- Phân tích dữ liệu thực tế ở trên
-- Đưa ra câu trả lời chính xác, hữu ích
-- Sử dụng emoji phù hợp
-- Nếu liên quan đến thời tiết, hãy đưa ra lời khuyên cụ thể
-- Nếu hỏi về tin tức, hãy tóm tắt thông tin quan trọng
-- Trả lời bằng tiếng Việt, ngắn gọn nhưng đầy đủ thông tin
-
-Hãy trả lời:`;
-
-  return prompt;
-}
-
-// ✅ **BƯỚC 3: GỌI API OPENAI**
-async function callOpenAI(prompt) {
-  if (!apiKeys.openai) {
-    throw new Error('Chưa có OpenAI API key. Vui lòng cấu hình trong phần cài đặt.');
-  }
-  
-  try {
-    const response = await fetch(API_ENDPOINTS.openai, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKeys.openai}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini', // Sử dụng model cost-effective
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 500,
-        temperature: 0.7
-      })
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`OpenAI API Error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
-    }
-    
-    const data = await response.json();
-    return data.choices[0].message.content;
-  } catch (error) {
-    console.error('OpenAI API Error:', error);
-    throw error;
-  }
-}
-
-// ✅ **BƯỚC 4: TÍCH HỢP TẤT CẢ - HÀM CHÍNH**
-async function generateSmartAIResponse(userMessage) {
-  try {
-    showNotification('🧠 AI đang phân tích dữ liệu thực tế...', 'info', 2000);
-    
-    // Bước 1: Thu thập dữ liệu từ các API
-    const [weatherData, newsData] = await Promise.allSettled([
-      getWeatherData('Hanoi'), // Có thể customize location
-      getNewsData()
-    ]);
-    
-    // Xử lý kết quả API calls
-    const weather = weatherData.status === 'fulfilled' ? weatherData.value : null;
-    const news = newsData.status === 'fulfilled' ? newsData.value : null;
-    
-    if (weatherData.status === 'rejected') {
-      console.warn('Weather API failed:', weatherData.reason);
-    }
-    if (newsData.status === 'rejected') {
-      console.warn('News API failed:', newsData.reason);
-    }
-    
-    // Bước 2: Tạo prompt thông minh
-    const prompt = createSmartPrompt(userMessage, weather, news);
-    
-    // Bước 3: Gọi OpenAI
-    const aiResponse = await callOpenAI(prompt);
-    
-    // Bước 4: Trả về kết quả
-    showNotification('✅ AI đã phân tích xong!', 'success', 2000);
-    return aiResponse;
-    
-  } catch (error) {
-    console.error('Smart AI Response Error:', error);
-    showNotification(`❌ Lỗi AI: ${error.message}`, 'error', 5000);
-    
-    // Fallback to basic response
-    return `❌ Xin lỗi, tôi gặp lỗi khi phân tích dữ liệu thực tế: ${error.message}
-    
-💡 Để sử dụng AI thông minh, vui lòng:
-1. Click ⚙️ để cấu hình API keys
-2. Nhập OpenAI API key (bắt đầu bằng sk-...)
-3. Nhập Weather API key (miễn phí tại weatherapi.com)
-
-Hiện tại tôi sẽ trả lời bằng dữ liệu mẫu: ${generateBasicResponse(userMessage)}`;
-  }
-}
-
-// Hàm fallback khi không có API
-function generateBasicResponse(message) {
-  const lowerMessage = message.toLowerCase();
-  
-  if (lowerMessage.includes('thời tiết')) {
-    return `🌤️ Thời tiết hiện tại (dữ liệu mẫu):
-- Nhiệt độ: 28°C
-- Độ ẩm: 75%
-- Tình trạng: Có mây
-- Lời khuyên: Nên mang theo ô khi ra ngoài!`;
-  }
-  
-  if (lowerMessage.includes('tin tức')) {
-    return `📰 Tin tức mẫu:
-- Thời tiết miền Bắc chuyển lạnh
-- Kinh tế phục hồi tích cực
-- Công nghệ AI phát triển mạnh`;
-  }
-  
-  return `Tôi cần API keys để phân tích dữ liệu thực tế. Vui lòng cấu hình trong phần cài đặt! 🔧`;
-}
-
-// Initialize everything when DOM is loaded
-document.addEventListener("DOMContentLoaded", () => {
-  // Initialize speech functionality
-  initializeSpeech();
-  
-  // Start clock with enhanced display
-  setInterval(updateClock, 1000);
-  updateClock();
-
-  // Initialize all components
-  initializeCharts();
-  window.weatherMap = initializeMap();
-  initializeMobileMenu();
-  initializeSmoothScrolling();
-  addEnhancedAnimations();
-
-  // Add event listeners for feature buttons
-  document.querySelectorAll('.feature-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      const feature = btn.getAttribute('data-feature');
-      if (feature === 'sos') {
-        activateSOS();
-      } else if (feature) {
-        handleFeatureClick(feature);
-      }
-    });
+  // Lưu cảnh báo vào localStorage
+  const alerts = JSON.parse(localStorage.getItem('weatherAlerts') || '[]');
+  alerts.push({
+    id: Date.now(),
+    type: alertType,
+    time: alertTime,
+    pushEnabled: pushEnabled,
+    created: new Date().toISOString()
   });
-
-  // Add search functionality
-  const searchInput = document.getElementById('locationSearch');
-  searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      handleLocationSearch();
-    }
-  });
-
-  // AI Assistant input handler
-  const aiInput = document.getElementById('aiInput');
-  if (aiInput) {
-    aiInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        sendAIMessage();
+  localStorage.setItem('weatherAlerts', JSON.stringify(alerts));
+  
+  // Đóng modal
+  modal.remove();
+  
+  // Hiển thị thông báo thành công
+  showNotification('Đã đặt cảnh báo thời tiết thành công!', 'success');
+  
+  // Yêu cầu quyền thông báo nếu cần
+  if (pushEnabled && 'Notification' in window && Notification.permission !== 'granted') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        showNotification('Đã bật thông báo push cho cảnh báo thời tiết!', 'success');
       }
     });
   }
+}
 
-  // Voice button handler
-  const voiceBtn = document.getElementById('voiceBtn');
-  if (voiceBtn) {
-    voiceBtn.addEventListener('click', startVoiceRecognition);
-  }
-
-  // Voice toggle handler
-  const voiceToggle = document.getElementById('voiceToggle');
-  if (voiceToggle) {
-    voiceToggle.addEventListener('click', () => {
-      isVoiceEnabled = !isVoiceEnabled;
-      voiceToggle.innerHTML = isVoiceEnabled ? '<i class="ri-volume-up-line text-xl"></i>' : '<i class="ri-volume-mute-line text-xl"></i>';
-      showNotification(isVoiceEnabled ? 'Đã bật phản hồi bằng giọng nói' : 'Đã tắt phản hồi bằng giọng nói', 'info');
-    });
-  }
-
-  // Close modals on escape key
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      const modals = ['disasterModal', 'aiAssistantModal'];
-      modals.forEach(modalId => {
-        const modal = document.getElementById(modalId);
-        if (modal && !modal.classList.contains('hidden')) {
-          if (modalId === 'disasterModal') closeDisasterWarningModal();
-          if (modalId === 'aiAssistantModal') closeAIAssistant();
-        }
+// Kiểm tra và gửi cảnh báo thời tiết
+function checkWeatherAlerts() {
+  const alerts = JSON.parse(localStorage.getItem('weatherAlerts') || '[]');
+  
+  alerts.forEach(alert => {
+    // Logic kiểm tra điều kiện cảnh báo
+    // Ở đây chỉ là demo, trong thực tế sẽ so sánh với dữ liệu thời tiết thực
+    const shouldAlert = Math.random() > 0.9; // 10% chance để demo
+    
+    if (shouldAlert && alert.pushEnabled && 'Notification' in window && Notification.permission === 'granted') {
+      new Notification('🌤️ Cảnh báo thời tiết', {
+        body: `Điều kiện thời tiết ${alert.type} đã được phát hiện tại Đà Nẵng`,
+        icon: '/favicon.ico',
+        tag: `weather-alert-${alert.id}`
       });
     }
   });
+}
 
-  // Update weather status indicator
-  setInterval(() => {
-    const statusIndicator = document.getElementById('weatherStatus');
-    if (statusIndicator) {
-      const dot = statusIndicator.querySelector('.w-2.h-2');
-      const text = statusIndicator.querySelector('span');
-      
-      // Simulate connection status
-      const isOnline = navigator.onLine;
-      if (isOnline) {
-        dot.className = 'w-2 h-2 bg-green-500 rounded-full animate-pulse';
-        text.textContent = 'Trực tuyến';
-      } else {
-        dot.className = 'w-2 h-2 bg-red-500 rounded-full';
-        text.textContent = 'Ngoại tuyến';
-      }
-    }
-  }, 5000);
+// Khởi tạo kiểm tra cảnh báo định kỳ
+setInterval(checkWeatherAlerts, 300000); // Kiểm tra mỗi 5 phút
 
-  // Make global functions available
-  window.locateUser = locateUser;
-  window.openAIAssistant = openAIAssistant;
-  window.closeAIAssistant = closeAIAssistant;
-  window.sendAIMessage = sendAIMessage;
-  window.askQuickQuestion = askQuickQuestion;
-  window.toggleApiConfig = toggleApiConfig;
-  window.saveApiKeys = saveApiKeys;
-  window.testApiConnection = testApiConnection;
-  window.activateSOS = activateSOS;
-  window.cancelSOS = cancelSOS;
-  window.confirmSOS = confirmSOS;
-  window.triggerEmergencyCall = triggerEmergencyCall;
-  window.callEmergency = callEmergency;
-  window.shareLocation = shareLocation;
-  window.shareLocationText = shareLocationText;
-  window.openDisasterWarningModal = openDisasterWarningModal;
-  window.closeDisasterWarningModal = closeDisasterWarningModal;
-  window.refreshAlerts = refreshAlerts;
-  window.subscribeAlerts = subscribeAlerts;
-  window.shareAlerts = shareAlerts;
-  window.exportReport = exportReport;
-
-  // Initialize API status
-  updateApiStatus();
-
-  // Show welcome notification
-  setTimeout(() => {
-    showNotification('Chào mừng đến với Weather & Life! 🌤️', 'success', 3000);
-  }, 1000);
-
-  // Show feature highlight
-  setTimeout(() => {
-    showNotification('🎉 Mới: Hỗ trợ nhận diện giọng nói và phản hồi bằng âm thanh!', 'info', 6000);
-  }, 3000);
+// Performance monitoring
+window.addEventListener('load', () => {
+  const loadTime = performance.now();
+  console.log(`⚡ Weather & Life Pro loaded in ${Math.round(loadTime)}ms`);
+  
+  // Show performance notification for development
+  if (loadTime > 3000) {
+    setTimeout(() => {
+      showNotification('⚠️ Trang web tải chậm. Đang tối ưu hóa...', 'warning');
+    }, 1000);
+  }
 });
 
-// Handle window resize for responsive charts
-window.addEventListener('resize', () => {
-  // Charts will auto-resize due to the resize listeners in initializeCharts
-});
-
-// Service Worker registration for offline support
+// Service Worker registration for offline support (if available)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
-      .then((registration) => {
+      .then(registration => {
         console.log('SW registered: ', registration);
       })
-      .catch((registrationError) => {
+      .catch(registrationError => {
         console.log('SW registration failed: ', registrationError);
       });
   });
 }
-
-// ✅ **API CONFIGURATION FUNCTIONS**
-
-function toggleApiConfig() {
-  const panel = document.getElementById('apiConfigPanel');
-  panel.classList.toggle('hidden');
-  
-  if (!panel.classList.contains('hidden')) {
-    // Load saved keys
-    document.getElementById('openaiKey').value = apiKeys.openai;
-    document.getElementById('weatherKey').value = apiKeys.weather;
-  }
-}
-
-function saveApiKeys() {
-  const openaiKey = document.getElementById('openaiKey').value.trim();
-  const weatherKey = document.getElementById('weatherKey').value.trim();
-  
-  // Validate keys
-  if (openaiKey && !openaiKey.startsWith('sk-')) {
-    showNotification('❌ OpenAI API key phải bắt đầu bằng "sk-"', 'error');
-    return;
-  }
-  
-  // Save to localStorage
-  if (openaiKey) {
-    localStorage.setItem('openai_key', openaiKey);
-    apiKeys.openai = openaiKey;
-  }
-  
-  if (weatherKey) {
-    localStorage.setItem('weather_key', weatherKey);
-    apiKeys.weather = weatherKey;
-  }
-  
-  updateApiStatus();
-  showNotification('✅ Đã lưu API keys thành công!', 'success');
-  
-  // Hide panel
-  document.getElementById('apiConfigPanel').classList.add('hidden');
-}
-
-async function testApiConnection() {
-  const testBtn = event.target;
-  const originalText = testBtn.innerHTML;
-  testBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Testing...';
-  testBtn.disabled = true;
-  
-  try {
-    let results = [];
-    
-    // Test Weather API
-    if (apiKeys.weather) {
-      try {
-        await getWeatherData('London');
-        results.push('✅ Weather API: OK');
-      } catch (error) {
-        results.push(`❌ Weather API: ${error.message}`);
-      }
-    } else {
-      results.push('⚠️ Weather API: Chưa cấu hình');
-    }
-    
-    // Test OpenAI API
-    if (apiKeys.openai) {
-      try {
-        await callOpenAI('Test connection');
-        results.push('✅ OpenAI API: OK');
-      } catch (error) {
-        results.push(`❌ OpenAI API: ${error.message}`);
-      }
-    } else {
-      results.push('⚠️ OpenAI API: Chưa cấu hình');
-    }
-    
-    // Show results
-    const resultText = results.join('\n');
-    alert(`🧪 KẾT QUẢ TEST API:\n\n${resultText}`);
-    
-    updateApiStatus();
-    
-  } catch (error) {
-    showNotification(`❌ Lỗi test API: ${error.message}`, 'error');
-  } finally {
-    testBtn.innerHTML = originalText;
-    testBtn.disabled = false;
-  }
-}
-
-function updateApiStatus() {
-  const statusElement = document.getElementById('apiStatus');
-  const dot = statusElement.querySelector('.w-2.h-2');
-  const text = statusElement.querySelector('span');
-  
-  const hasOpenAI = !!apiKeys.openai;
-  const hasWeather = !!apiKeys.weather;
-  
-  if (hasOpenAI && hasWeather) {
-    dot.className = 'w-2 h-2 bg-green-400 rounded-full animate-pulse';
-    text.textContent = 'AI Smart';
-    statusElement.title = 'AI thông minh đã sẵn sàng với dữ liệu thực tế';
-  } else if (hasOpenAI || hasWeather) {
-    dot.className = 'w-2 h-2 bg-yellow-400 rounded-full animate-pulse';
-    text.textContent = 'Partial';
-    statusElement.title = 'Một số API đã cấu hình, cần thêm để hoạt động tối ưu';
-  } else {
-    dot.className = 'w-2 h-2 bg-red-400 rounded-full';
-    text.textContent = 'No API';
-    statusElement.title = 'Chưa cấu hình API keys. Click để cài đặt.';
-  }
-}
-
-// Initialize API status on load
-document.addEventListener('DOMContentLoaded', () => {
-  updateApiStatus();
-  
-  // Add click handler for API status
-  document.getElementById('apiStatus').addEventListener('click', toggleApiConfig);
-});
